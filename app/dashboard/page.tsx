@@ -1,0 +1,247 @@
+"use client";
+import { motion } from "motion/react";
+import Link from "next/link";
+import AppNav from "@/components/AppNav";
+import {
+  SquaresFour,
+  Trophy,
+  CheckCircle,
+  Clock,
+  ArrowRight,
+  Lock,
+  Flame,
+  Target,
+} from "@phosphor-icons/react";
+
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+
+const stagger = { visible: { transition: { staggerChildren: 0.09 } } };
+const fadeUp = {
+  hidden: { opacity: 0, y: 14, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: EASE_OUT } },
+};
+
+function ProgressBar({ value }: { value: number }) {
+  return (
+    <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
+      <motion.div
+        className="absolute inset-y-0 left-0 bg-cyan-600 rounded-full"
+        initial={{ width: 0 }}
+        animate={{ width: `${value}%` }}
+        transition={{ duration: 0.9, ease: EASE_OUT, delay: 0.3 }}
+      />
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const userName = "Beymar";
+  const progress = 40;
+  const level1Missions = 2;
+  const totalMissions = 5;
+
+  return (
+    <div className="min-h-[100dvh] bg-white flex flex-col">
+      <AppNav userName={userName} role="student" />
+
+      <main className="flex-1 max-w-screen-lg mx-auto w-full px-5 py-10">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: EASE_OUT }}
+          className="mb-10"
+        >
+          <p className="text-sm text-gray-600 font-mono">Bienvenido de nuevo</p>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 mt-0.5">
+            Hola, {userName}
+          </h1>
+        </motion.div>
+
+        {/* Progress overview */}
+        <motion.div
+          variants={stagger}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"
+        >
+          {[
+            {
+              icon: <Target size={18} weight="duotone" className="text-cyan-600" />,
+              label: "Progreso general",
+              value: `${progress}%`,
+              sub: "Nivel 1 en curso",
+              accent: "cyan",
+            },
+            {
+              icon: <CheckCircle size={18} weight="duotone" className="text-emerald-600" />,
+              label: "Misiones completadas",
+              value: `${level1Missions}/${totalMissions}`,
+              sub: "Nivel 1 Basico",
+              accent: "emerald",
+            },
+            {
+              icon: <Flame size={18} weight="duotone" className="text-amber-600" />,
+              label: "Racha actual",
+              value: "3 dias",
+              sub: "Sigue asi",
+              accent: "amber",
+            },
+          ].map((stat) => (
+            <motion.div
+              key={stat.label}
+              variants={fadeUp}
+              className="bg-gray-100 border border-gray-300 rounded-xl p-5"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                {stat.icon}
+                <span className="text-xs text-gray-600">{stat.label}</span>
+              </div>
+              <p className="text-2xl font-bold font-mono text-gray-800">{stat.value}</p>
+              <p className="text-xs text-gray-600 mt-0.5">{stat.sub}</p>
+            </motion.div>
+          ))}
+        </motion.div>
+
+        {/* Global progress bar */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="bg-gray-100 border border-gray-300 rounded-xl p-5 mb-8"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-gray-700">Progreso del curso</span>
+            <span className="text-sm font-mono font-bold text-cyan-600">{progress}%</span>
+          </div>
+          <ProgressBar value={progress} />
+          <p className="text-xs text-gray-600 mt-2.5">
+            Completaste {level1Missions} de {totalMissions} misiones en Nivel 1
+          </p>
+        </motion.div>
+
+        {/* Levels */}
+        <motion.div
+          variants={stagger}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8"
+        >
+          <motion.div
+            variants={fadeUp}
+            className="card-hover bg-gray-100 border border-gray-300 rounded-xl p-6 flex flex-col gap-4"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-xs font-mono text-cyan-600 uppercase tracking-wider">Nivel 1</span>
+                <h3 className="mt-0.5 text-lg font-bold text-gray-800">Basico</h3>
+                <p className="mt-1 text-xs text-gray-600">Programacion secuencial</p>
+              </div>
+              <span className="text-xs font-mono text-amber-600 bg-amber-400/10 px-2.5 py-1 rounded-full flex items-center gap-1">
+                <Clock size={11} weight="fill" />
+                En progreso
+              </span>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs text-gray-600 mb-2">
+                <span>Misiones</span>
+                <span className="font-mono">{level1Missions}/{totalMissions}</span>
+              </div>
+              <ProgressBar value={(level1Missions / totalMissions) * 100} />
+            </div>
+
+            <div className="flex gap-2 mt-auto">
+              <Link
+                href="/levels/1/mission"
+                className="btn-press flex-1 flex items-center justify-center gap-2 bg-cyan-600 text-white font-semibold text-sm py-2.5 rounded-lg hover:bg-cyan-700 transition-colors"
+              >
+                Continuar
+                <ArrowRight size={14} weight="bold" />
+              </Link>
+              <Link
+                href="/levels"
+                className="btn-press px-4 flex items-center justify-center text-sm text-gray-600 border border-zinc-700 rounded-lg hover:border-gray-400 hover:text-gray-700 transition-colors"
+              >
+                <SquaresFour size={16} />
+              </Link>
+            </div>
+          </motion.div>
+
+          <motion.div
+            variants={fadeUp}
+            className="bg-gray-100/40 border border-gray-300 rounded-xl p-6 flex flex-col gap-4 opacity-60"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-xs font-mono text-gray-500 uppercase tracking-wider">Nivel 2</span>
+                <h3 className="mt-0.5 text-lg font-bold text-gray-500">Intermedio</h3>
+                <p className="mt-1 text-xs text-gray-500">Sensores y condicionales</p>
+              </div>
+              <span className="text-xs font-mono text-gray-500 bg-gray-200 px-2.5 py-1 rounded-full flex items-center gap-1">
+                <Lock size={11} weight="fill" />
+                Bloqueado
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 flex-1">
+              Completa el Nivel 1 para desbloquear este nivel.
+            </p>
+            <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-200/50 rounded-lg px-3 py-2.5">
+              <Lock size={13} />
+              Disponible al completar Nivel 1
+            </div>
+          </motion.div>
+        </motion.div>
+
+        {/* Last missions */}
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.45, ease: EASE_OUT }}
+          className="bg-gray-100 border border-gray-300 rounded-xl p-5"
+        >
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">Ultimas misiones</h2>
+          <div className="flex flex-col gap-3">
+            {[
+              { name: "Movimiento basico", level: 1, status: "Completado", time: "00:48", score: 85 },
+              { name: "Giro y avance", level: 1, status: "Completado", time: "01:12", score: 72 },
+              { name: "Secuencia larga", level: 1, status: "En progreso", time: "--:--", score: null },
+            ].map((m, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between py-2.5 border-b border-gray-300 last:border-0"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${
+                      m.status === "Completado" ? "bg-emerald-400/10" : "bg-amber-400/10"
+                    }`}
+                  >
+                    {m.status === "Completado" ? (
+                      <CheckCircle size={14} weight="fill" className="text-emerald-600" />
+                    ) : (
+                      <Clock size={14} weight="fill" className="text-amber-600" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-700">{m.name}</p>
+                    <p className="text-xs text-gray-600">Nivel {m.level}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 text-right">
+                  {m.score && (
+                    <div className="hidden sm:flex items-center gap-1 text-xs font-mono text-amber-600">
+                      <Trophy size={11} weight="fill" />
+                      {m.score}/100
+                    </div>
+                  )}
+                  <span className="text-xs font-mono text-gray-600">{m.time}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </main>
+    </div>
+  );
+}
