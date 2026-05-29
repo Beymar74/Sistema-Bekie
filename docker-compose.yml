@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  bekie:
+    container_name: bekie
+    image: node:20
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm run dev"

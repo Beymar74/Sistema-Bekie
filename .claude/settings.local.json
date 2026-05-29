@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx skills *)",
+      "PowerShell(npx skills add https://github.com/google-labs-code/stitch-skills --skill taste-design 2>&1)",
+      "PowerShell(\\(Get-Command node -ErrorAction SilentlyContinue\\).Source; \\(Get-Command npm -ErrorAction SilentlyContinue\\).Source; \\(Get-Command npx -ErrorAction SilentlyContinue\\).Source; $env:PATH -split ';' | Where-Object { $_ -match 'node' })",
+      "PowerShell(Head -40)",
+      "Bash(docker rm *)",
+      "Bash(docker-compose -f \"c:\\\\Users\\\\Beymar\\\\Desktop\\\\BEKIE\\\\docker-compose.yml\" up -d bekie)"
+    ]
+  }
+}
