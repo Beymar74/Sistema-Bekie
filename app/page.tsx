@@ -8,12 +8,8 @@ import {
   ArrowRight,
   Code,
   Cpu,
-  Robot,
   Play,
-  Lock,
   CheckCircle,
-  ArrowUp,
-  Gear,
   WifiHigh,
   GraduationCap,
   Sparkle,
@@ -398,7 +394,7 @@ export default function HomePage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <span className="text-xs font-mono text-cyan-600 uppercase tracking-wider">
-                      Nivel 1
+                      Nivel 0
                     </span>
                     <h3 className="mt-1 text-2xl font-bold text-gray-800">
                       Basico
@@ -440,27 +436,27 @@ export default function HomePage() {
 
             <motion.div
               variants={fadeUp}
-              className="card-hover relative p-7 rounded-2xl border border-gray-300 bg-gray-100/30 flex flex-col gap-6"
+              className="card-hover relative p-7 rounded-2xl border border-violet-200 bg-violet-50 flex flex-col gap-6"
             >
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-zinc-800/10 to-transparent pointer-events-none" />
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-800/10 to-transparent pointer-events-none" />
               <div>
                 <div className="flex items-start justify-between">
                   <div>
-                    <span className="text-xs font-mono text-gray-600 uppercase tracking-wider">
-                      Nivel 2
+                    <span className="text-xs font-mono text-violet-600 uppercase tracking-wider">
+                      Nivel 1
                     </span>
-                    <h3 className="mt-1 text-2xl font-bold text-gray-600">
+                    <h3 className="mt-1 text-2xl font-bold text-gray-800">
                       Intermedio
                     </h3>
                   </div>
-                  <span className="flex items-center gap-1.5 text-xs font-mono text-gray-500 bg-gray-200 px-2.5 py-1 rounded-full">
-                    <Lock size={12} weight="fill" />
-                    Bloqueado
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-emerald-600 bg-emerald-600/10 px-2.5 py-1 rounded-full">
+                    <CheckCircle size={12} weight="fill" />
+                    Disponible
                   </span>
                 </div>
-                <p className="mt-3 text-gray-500 text-sm leading-relaxed">
+                <p className="mt-3 text-gray-600 text-sm leading-relaxed">
                   Sensores y condicionales. El robot usa datos de proximidad
-                  para evitar obstaculos y tomar decisiones.
+                  para evitar obstaculos, leer el laberinto y tomar decisiones.
                 </p>
               </div>
               <ul className="flex flex-col gap-2">
@@ -471,17 +467,20 @@ export default function HomePage() {
                 ].map((feat) => (
                   <li
                     key={feat}
-                    className="flex items-center gap-2 text-sm text-gray-500"
+                    className="flex items-center gap-2 text-sm text-gray-600"
                   >
-                    <ArrowRight size={13} className="text-gray-500 flex-shrink-0" />
+                    <ArrowRight size={13} className="text-violet-600 flex-shrink-0" />
                     {feat}
                   </li>
                 ))}
               </ul>
-              <div className="mt-auto inline-flex items-center gap-2 bg-gray-200 text-gray-500 text-sm px-5 py-2.5 rounded-lg w-fit cursor-not-allowed">
-                <Lock size={14} />
-                Se desbloquea al completar Nivel 1
-              </div>
+              <Link
+                href="/levels/2/mission"
+                className="btn-press mt-auto inline-flex items-center justify-center gap-2 bg-violet-600 text-white font-semibold text-sm px-5 py-2.5 rounded-lg hover:bg-violet-700 transition-colors w-fit"
+              >
+                Entrar
+                <ArrowRight size={15} weight="bold" />
+              </Link>
             </motion.div>
           </motion.div>
         </div>

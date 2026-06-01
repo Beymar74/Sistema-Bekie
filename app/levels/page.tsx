@@ -1,5 +1,6 @@
 "use client";
 import { motion } from "motion/react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import AppNav from "@/components/AppNav";
 import {
@@ -9,8 +10,8 @@ import {
   Clock,
   Code,
   Cpu,
-  CaretRight,
 } from "@phosphor-icons/react";
+import { LEVEL_2_STAGES } from "@/lib/nivel-1";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const stagger = { visible: { transition: { staggerChildren: 0.1 } } };
@@ -20,6 +21,24 @@ const fadeUp = {
 };
 
 export default function LevelsPage() {
+  const unlockedIntermediateMission = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") return () => undefined;
+
+      window.addEventListener("storage", onStoreChange);
+      return () => window.removeEventListener("storage", onStoreChange);
+    },
+    () => {
+      if (typeof window === "undefined") return 1;
+
+      const stored = Number(window.localStorage.getItem("bekie-level-2-progress") ?? "1");
+      const safeValue = Number.isNaN(stored) ? 1 : stored;
+      return Math.min(LEVEL_2_STAGES.length, Math.max(1, safeValue));
+    },
+    () => 1
+  );
+  const completedIntermediateMissions = Math.max(0, unlockedIntermediateMission - 1);
+
   return (
     <div className="min-h-[100dvh] bg-white flex flex-col">
       <AppNav userName="Beymar" role="student" />
@@ -43,7 +62,7 @@ export default function LevelsPage() {
           animate="visible"
           className="grid grid-cols-1 md:grid-cols-2 gap-6"
         >
-          {/* Nivel 1 */}
+          {/* Nivel 0 */}
           <motion.div variants={fadeUp} className="flex flex-col">
             <div className="card-hover bg-gray-100 border border-gray-300 rounded-2xl p-7 flex flex-col gap-6 h-full">
               <div className="flex items-start justify-between">
@@ -53,7 +72,7 @@ export default function LevelsPage() {
                   </div>
                   <div>
                     <span className="text-xs font-mono text-cyan-600 uppercase tracking-wider">
-                      Nivel 1
+                      Nivel 0
                     </span>
                     <h2 className="text-xl font-bold text-gray-800">Basico</h2>
                   </div>
@@ -130,42 +149,48 @@ export default function LevelsPage() {
             </div>
           </motion.div>
 
-          {/* Nivel 2 */}
+          {/* Nivel 1 */}
           <motion.div variants={fadeUp} className="flex flex-col">
-            <div className="bg-gray-100/30 border border-gray-300 rounded-2xl p-7 flex flex-col gap-6 h-full">
+            <div className="card-hover bg-violet-50 border border-violet-200 rounded-2xl p-7 flex flex-col gap-6 h-full">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gray-200 border border-gray-300 flex items-center justify-center">
-                    <Cpu size={20} weight="duotone" className="text-gray-500" />
+                  <div className="w-10 h-10 rounded-xl bg-violet-600/10 border border-violet-400/20 flex items-center justify-center">
+                    <Cpu size={20} weight="duotone" className="text-violet-600" />
                   </div>
                   <div>
-                    <span className="text-xs font-mono text-gray-500 uppercase tracking-wider">
-                      Nivel 2
+                    <span className="text-xs font-mono text-violet-600 uppercase tracking-wider">
+                      Nivel 1
                     </span>
-                    <h2 className="text-xl font-bold text-gray-500">Intermedio</h2>
+                    <h2 className="text-xl font-bold text-gray-800">Intermedio</h2>
                   </div>
                 </div>
-                <span className="flex items-center gap-1.5 text-xs font-mono text-gray-500 bg-gray-200 px-2.5 py-1 rounded-full">
-                  <Lock size={11} weight="fill" />
-                  Bloqueado
+                <span className="flex items-center gap-1.5 text-xs font-mono text-emerald-600 bg-emerald-400/10 px-2.5 py-1 rounded-full">
+                  <CheckCircle size={11} weight="fill" />
+                  Disponible
                 </span>
               </div>
 
-              <p className="text-sm text-gray-500 leading-relaxed">
-                Sensores y condicionales. El robot usa datos de proximidad para
-                tomar decisiones. Requiere completar el Nivel 1.
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Condicionales y bucles. El robot detecta el entorno internamente, pero aquí tú
+                programas una sola estructura if/else para reaccionar frente a obstáculos,
+                caminos libres y desvíos.
               </p>
 
               <div>
-                <p className="text-xs text-gray-500 mb-3 font-medium">Bloques disponibles</p>
+                <p className="text-xs text-gray-600 mb-3 font-medium">Lo que aprenderás</p>
                 <div className="flex flex-wrap gap-2">
-                  {["Sensor frontal", "Sensor izquierdo", "Sensor derecho", "Si obstaculo", "Mientras no meta", "Repetir"].map(
-                    (b) => (
+                  {[
+                    "Usar if/else",
+                    "Aprovechar caminos libres",
+                    "Encadenar decisiones",
+                    "Repetir rutas con bucles",
+                  ].map(
+                    (item) => (
                       <span
-                        key={b}
-                        className="text-[11px] font-mono bg-gray-100 text-gray-500 px-2 py-1 rounded-md border border-gray-200"
+                        key={item}
+                        className="text-[11px] font-mono bg-violet-100 text-violet-700 px-2 py-1 rounded-md border border-violet-200"
                       >
-                        {b}
+                        {item}
                       </span>
                     )
                   )}
@@ -173,26 +198,45 @@ export default function LevelsPage() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <p className="text-xs text-gray-500 font-medium">Misiones (0/5)</p>
-                {["Primer sensor", "Evasion simple", "Laberinto con sensores", "Decision multiple", "Reto avanzado"].map(
-                  (m) => (
+                <p className="text-xs text-gray-600 font-medium">
+                  Misiones ({completedIntermediateMissions}/{LEVEL_2_STAGES.length})
+                </p>
+                {LEVEL_2_STAGES.map((stage) => {
+                  const unlocked = stage.id <= unlockedIntermediateMission;
+
+                  return (
                     <div
-                      key={m}
+                      key={stage.id}
                       className="flex items-center gap-3 py-2 border-b border-gray-300/50 last:border-0"
                     >
-                      <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center flex-shrink-0">
-                        <Lock size={11} weight="fill" />
+                      <span
+                        className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                          unlocked
+                            ? "bg-violet-400/15 text-violet-600"
+                            : "bg-gray-200 text-gray-400"
+                        }`}
+                      >
+                        {unlocked ? (
+                          <CheckCircle size={11} weight="fill" />
+                        ) : (
+                          <Lock size={11} weight="fill" />
+                        )}
                       </span>
-                      <span className="text-sm text-gray-500">{m}</span>
+                      <span className={`text-sm ${unlocked ? "text-gray-700" : "text-gray-500"}`}>
+                        {stage.title}
+                      </span>
                     </div>
-                  )
-                )}
+                  );
+                })}
               </div>
 
-              <div className="mt-auto flex items-center gap-2.5 bg-gray-100 rounded-xl px-4 py-3 text-sm text-gray-500">
-                <Lock size={15} />
-                Completa el Nivel 1 para desbloquear
-              </div>
+              <Link
+                href="/levels/2/mission"
+                className="btn-press mt-auto flex items-center justify-center gap-2 bg-violet-600 text-white font-semibold text-sm py-3 rounded-xl hover:bg-violet-700 transition-colors"
+              >
+                Comenzar nivel
+                <ArrowRight size={15} weight="bold" />
+              </Link>
             </div>
           </motion.div>
         </motion.div>

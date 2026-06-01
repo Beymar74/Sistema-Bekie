@@ -8,7 +8,6 @@ import {
   CheckCircle,
   Clock,
   ArrowRight,
-  Lock,
   Flame,
   Target,
 } from "@phosphor-icons/react";
@@ -70,14 +69,14 @@ export default function DashboardPage() {
               icon: <Target size={18} weight="duotone" className="text-cyan-600" />,
               label: "Progreso general",
               value: `${progress}%`,
-              sub: "Nivel 1 en curso",
+              sub: "Nivel 0 en curso",
               accent: "cyan",
             },
             {
               icon: <CheckCircle size={18} weight="duotone" className="text-emerald-600" />,
               label: "Misiones completadas",
               value: `${level1Missions}/${totalMissions}`,
-              sub: "Nivel 1 Basico",
+              sub: "Nivel 0 Basico",
               accent: "emerald",
             },
             {
@@ -116,7 +115,7 @@ export default function DashboardPage() {
           </div>
           <ProgressBar value={progress} />
           <p className="text-xs text-gray-600 mt-2.5">
-            Completaste {level1Missions} de {totalMissions} misiones en Nivel 1
+            Completaste {level1Missions} de {totalMissions} misiones en Nivel 0
           </p>
         </motion.div>
 
@@ -133,7 +132,7 @@ export default function DashboardPage() {
           >
             <div className="flex items-start justify-between">
               <div>
-                <span className="text-xs font-mono text-cyan-600 uppercase tracking-wider">Nivel 1</span>
+                <span className="text-xs font-mono text-cyan-600 uppercase tracking-wider">Nivel 0</span>
                 <h3 className="mt-0.5 text-lg font-bold text-gray-800">Basico</h3>
                 <p className="mt-1 text-xs text-gray-600">Programacion secuencial</p>
               </div>
@@ -170,26 +169,29 @@ export default function DashboardPage() {
 
           <motion.div
             variants={fadeUp}
-            className="bg-gray-100/40 border border-gray-300 rounded-xl p-6 flex flex-col gap-4 opacity-60"
+            className="bg-violet-50 border border-violet-200 rounded-xl p-6 flex flex-col gap-4"
           >
             <div className="flex items-start justify-between">
               <div>
-                <span className="text-xs font-mono text-gray-500 uppercase tracking-wider">Nivel 2</span>
-                <h3 className="mt-0.5 text-lg font-bold text-gray-500">Intermedio</h3>
-                <p className="mt-1 text-xs text-gray-500">Sensores y condicionales</p>
+                <span className="text-xs font-mono text-violet-600 uppercase tracking-wider">Nivel 1</span>
+                <h3 className="mt-0.5 text-lg font-bold text-gray-800">Intermedio</h3>
+                <p className="mt-1 text-xs text-gray-600">Sensores y condicionales</p>
               </div>
-              <span className="text-xs font-mono text-gray-500 bg-gray-200 px-2.5 py-1 rounded-full flex items-center gap-1">
-                <Lock size={11} weight="fill" />
-                Bloqueado
+              <span className="text-xs font-mono text-emerald-600 bg-emerald-400/10 px-2.5 py-1 rounded-full flex items-center gap-1">
+                <CheckCircle size={11} weight="fill" />
+                Disponible
               </span>
             </div>
-            <p className="text-xs text-gray-500 flex-1">
-              Completa el Nivel 1 para desbloquear este nivel.
+            <p className="text-xs text-gray-600 flex-1">
+              Ahora puedes entrar al Nivel 1 para probar sensores, condicionales y el laberinto intermedio.
             </p>
-            <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-200/50 rounded-lg px-3 py-2.5">
-              <Lock size={13} />
-              Disponible al completar Nivel 1
-            </div>
+            <Link
+              href="/levels/2/mission"
+              className="btn-press mt-auto inline-flex items-center justify-center gap-2 bg-violet-600 text-white font-semibold text-sm py-2.5 rounded-lg hover:bg-violet-700 transition-colors"
+            >
+              Ir al Nivel 1
+              <ArrowRight size={14} weight="bold" />
+            </Link>
           </motion.div>
         </motion.div>
 

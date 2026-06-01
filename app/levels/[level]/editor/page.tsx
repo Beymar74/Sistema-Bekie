@@ -1,24 +1,46 @@
 "use client";
-import { useState, useRef, useCallback } from "react";
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import AppNav from "@/components/AppNav";
+import IntermediateLevelEditor from "@/components/IntermediateLevelEditor";
 import {
-  Play, Trash, ArrowLeft, X, Plus, ArrowRight, CheckCircle,
-  Warning, Robot, Cpu, StopCircle, ArrowUp, ArrowDown,
-  ArrowCounterClockwise, ArrowClockwise, Timer, Flag,
+  ArrowLeft,
+  CheckCircle,
+  Cpu,
+  Play,
+  Plus,
+  StopCircle,
+  Trash,
+  Warning,
+  X,
 } from "@phosphor-icons/react";
+import {
+  LEVEL_EDITORS as BASIC_LEVEL_EDITORS,
+  type BlockType,
+  type Dir,
+  type LevelKey,
+  type PaletteBlock,
+} from "@/lib/levels";
+import {
+  LEVEL_2_STAGES,
+  LEVEL_EDITORS as INTERMEDIATE_LEVEL_EDITORS,
+} from "@/lib/nivel-1";
 
 /* ─ Types ─ */
-type Dir = 0 | 1 | 2 | 3; // right, down, left, up
 type SimStatus = "idle" | "running" | "success" | "collision" | "oob" | "incomplete";
 
-interface Block {
+interface Block extends PaletteBlock {
   id: string;
-  type: string;
-  label: string;
-  colorClass: string;
-  icon: React.ReactNode;
+  steps?: number;
+}
+
+interface SensorState {
+  front: number | null;
+  left: number | null;
+  right: number | null;
+  obstacleAhead: boolean;
 }
 
 interface SimState {
@@ -27,119 +49,211 @@ interface SimState {
   visited: Set<string>;
   status: SimStatus;
   message: string;
+  sensors: SensorState;
 }
 
-/* ─ Grid definitions ─ */
-const GRID_L1 = [
-  [2, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 3],
+/* ─ Helpers ─ */
+const DIR_DELTA: [number, number][] = [
+  [0, 1],
+  [1, 0],
+  [0, -1],
+  [-1, 0],
 ];
-
-const GRID_L2 = [
-  [2, 0, 0, 0, 0, 0, 0],
-  [0, 0, 1, 0, 0, 0, 0],
-  [0, 0, 0, 0, 1, 0, 0],
-  [0, 1, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 1, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 3],
-];
-
-/* ─ Direction helpers ─ */
-const DIR_DELTA: [number, number][] = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 const DIR_ARROW = ["→", "↓", "←", "↑"];
-
-/* ─ Available block definitions per level ─ */
-const PALETTE_L1: Omit<Block, "id">[] = [
-  { type: "INIT", label: "Iniciar mision", colorClass: "border-emerald-300 bg-emerald-50 text-emerald-700", icon: <Flag size={14} weight="fill" /> },
-  { type: "FORWARD", label: "Avanzar", colorClass: "border-cyan-300 bg-cyan-50 text-cyan-700", icon: <ArrowUp size={14} weight="bold" /> },
-  { type: "BACKWARD", label: "Retroceder", colorClass: "border-cyan-300 bg-cyan-50 text-cyan-700", icon: <ArrowDown size={14} weight="bold" /> },
-  { type: "TURN_RIGHT", label: "Girar derecha", colorClass: "border-cyan-300 bg-cyan-50 text-cyan-700", icon: <ArrowClockwise size={14} weight="bold" /> },
-  { type: "TURN_LEFT", label: "Girar izquierda", colorClass: "border-cyan-300 bg-cyan-50 text-cyan-700", icon: <ArrowCounterClockwise size={14} weight="bold" /> },
-  { type: "WAIT", label: "Esperar", colorClass: "border-amber-300 bg-amber-50 text-amber-700", icon: <Timer size={14} weight="bold" /> },
-  { type: "STOP", label: "Detener", colorClass: "border-red-300 bg-red-50 text-red-600", icon: <StopCircle size={14} weight="fill" /> },
-];
-
-const PALETTE_SENSORS: Omit<Block, "id">[] = [
-  { type: "SENSOR_F", label: "Sensor frontal", colorClass: "border-violet-300 bg-violet-50 text-violet-700", icon: <Cpu size={14} weight="duotone" /> },
-  { type: "SENSOR_L", label: "Sensor izquierdo", colorClass: "border-violet-300 bg-violet-50 text-violet-700", icon: <Cpu size={14} weight="duotone" /> },
-  { type: "SENSOR_R", label: "Sensor derecho", colorClass: "border-violet-300 bg-violet-50 text-violet-700", icon: <Cpu size={14} weight="duotone" /> },
-  { type: "IF_OBS", label: "Si hay obstaculo", colorClass: "border-amber-300 bg-amber-50 text-amber-700", icon: <Warning size={14} weight="fill" /> },
-  { type: "WHILE_GOAL", label: "Mientras no llegue", colorClass: "border-amber-300 bg-amber-50 text-amber-700", icon: <ArrowRight size={14} weight="bold" /> },
-];
-
+const MAX_STEPS = 220;
+const MAX_LOOPS = 10;
+const SENSOR_STEP_CM = 20;
 let uid = 0;
 const genId = () => `b_${++uid}`;
 
-/* ─ Main page ─ */
+const formatDistance = (value: number | null) => (value === null ? "--" : `${value} cm`);
+
 export default function EditorPage() {
   const params = useParams();
   const router = useRouter();
-  const levelKey = (params.level as string) || "1";
-  const isL2 = levelKey === "2";
-  const grid = isL2 ? GRID_L2 : GRID_L1;
-  const palette = isL2 ? [...PALETTE_L1, ...PALETTE_SENSORS] : PALETTE_L1;
+  const searchParams = useSearchParams();
+  const levelKey = ((params.level as string) || "1") as LevelKey;
+  const isIntermediate = levelKey === "2";
+  const config = isIntermediate
+    ? INTERMEDIATE_LEVEL_EDITORS["2"]
+    : BASIC_LEVEL_EDITORS["1"];
+  const missionIndexRaw = Number(searchParams.get("mission") ?? "1");
+  const missionIndex = Math.min(
+    LEVEL_2_STAGES.length,
+    Math.max(1, Number.isNaN(missionIndexRaw) ? 1 : missionIndexRaw)
+  );
+  const stage = LEVEL_2_STAGES[missionIndex - 1] ?? LEVEL_2_STAGES[0];
 
-  const [program, setProgram] = useState<Block[]>([
-    { ...PALETTE_L1[0], id: genId() },
-  ]);
-  const [sim, setSim] = useState<SimState>({
-    pos: [0, 0],
-    dir: 0,
-    visited: new Set(["0-0"]),
-    status: "idle",
-    message: "",
-  });
+  const grid = config.grid;
+  const gridSize = grid.length;
+  const initialProgram = useCallback(
+    (): Block[] => [{ ...config.palette[0], id: genId() }],
+    [config.palette]
+  );
+  const initialSim = useCallback(
+    (): SimState => ({
+      pos: [...config.start] as [number, number],
+      dir: config.startDir,
+      visited: new Set([`${config.start[0]}-${config.start[1]}`]),
+      status: "idle",
+      message: "",
+      sensors: {
+        front: null,
+        left: null,
+        right: null,
+        obstacleAhead: false,
+      },
+    }),
+    [config.start, config.startDir]
+  );
+
+  const [program, setProgram] = useState<Block[]>(() => initialProgram());
+  const [sim, setSim] = useState<SimState>(() => initialSim());
   const [canSend, setCanSend] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const normalizeStepCount = useCallback((value: number) => {
+    if (!Number.isFinite(value)) return 1;
+    return Math.max(1, Math.min(9, Math.floor(value)));
+  }, []);
 
-  const addBlock = (def: Omit<Block, "id">) => {
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    []
+  );
+
+  const addBlock = (def: PaletteBlock) => {
     if (program.length >= 25) return;
-    setProgram((p) => [...p, { ...def, id: genId() }]);
+    setProgram((current) => [
+      ...current,
+      { ...def, id: genId(), ...(def.type === "FORWARD" ? { steps: 1 } : {}) },
+    ]);
   };
 
   const removeBlock = (id: string) => {
-    setProgram((p) => p.filter((b) => b.id !== id && !(p[0].id === id)));
+    setProgram((current) => current.filter((block, index) => index === 0 || block.id !== id));
   };
 
-  const clearProgram = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setProgram([{ ...PALETTE_L1[0], id: genId() }]);
-    setSim({ pos: [0, 0], dir: 0, visited: new Set(["0-0"]), status: "idle", message: "" });
-    setCanSend(false);
-  };
+  const syncState = useCallback(
+    (
+      pos: [number, number],
+      dir: Dir,
+      visited: Set<string>,
+      sensors: SensorState,
+      status: SimStatus,
+      message = ""
+    ) => {
+      setSim({ pos, dir, visited: new Set(visited), sensors: { ...sensors }, status, message });
+    },
+    []
+  );
 
-  const stopSim = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setSim((s) => ({ ...s, status: "idle", message: "" }));
-  };
+  const measureDistance = useCallback(
+    (pos: [number, number], dir: Dir) => {
+      const [dr, dc] = DIR_DELTA[dir];
+      let row = pos[0];
+      let col = pos[1];
+      let cells = 0;
+
+      while (true) {
+        row += dr;
+        col += dc;
+        cells += 1;
+
+        if (row < 0 || row >= gridSize || col < 0 || col >= grid[row]?.length) {
+          return cells * SENSOR_STEP_CM;
+        }
+
+        if (grid[row][col] === 1) {
+          return cells * SENSOR_STEP_CM;
+        }
+      }
+    },
+    [grid, gridSize]
+  );
+
+  const readSensors = useCallback(
+    (pos: [number, number], dir: Dir): SensorState => {
+      const front = measureDistance(pos, dir);
+      return {
+        front,
+        left: measureDistance(pos, ((dir + 3) % 4) as Dir),
+        right: measureDistance(pos, ((dir + 1) % 4) as Dir),
+        obstacleAhead: front <= SENSOR_STEP_CM,
+      };
+    },
+    [measureDistance]
+  );
+
+  const getCell = useCallback(
+    (pos: [number, number]) => grid[pos[0]]?.[pos[1]] ?? null,
+    [grid]
+  );
 
   const runSimulation = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    let pos: [number, number] = [0, 0];
-    let dir: Dir = 0;
-    const visited = new Set<string>(["0-0"]);
+    let pos: [number, number] = [...config.start] as [number, number];
+    let dir: Dir = config.startDir;
+    const visited = new Set<string>([`${pos[0]}-${pos[1]}`]);
+    let sensors = readSensors(pos, dir);
     let stepIdx = 0;
-    const blocks = program.filter((b) => b.type !== "INIT");
+    let stepCount = 0;
+    let loopCount = 0;
+    let loopStartIndex: number | null = null;
+    let skipAfterBranch = 0;
+    const blocks = program.filter((block) => block.type !== "INIT");
+    const stopIndex = blocks.findIndex((block) => block.type === "STOP");
+    const loopExitIndex = stopIndex !== -1 ? stopIndex : blocks.length;
 
-    setSim({ pos, dir, visited: new Set(visited), status: "running", message: "" });
     setCanSend(false);
+    syncState(pos, dir, visited, sensors, "running", "Simulacion iniciada.");
 
-    const finish = (status: SimStatus, message: string) => {
-      setSim({ pos, dir, visited: new Set(visited), status, message });
+    const finish = (status: Exclude<SimStatus, "running" | "idle">, message: string) => {
+      syncState(pos, dir, visited, sensors, status, message);
       if (status === "success") setCanSend(true);
     };
 
+    const moveRobot = (movementDir: Dir, collisionMessage: string, oobMessage: string) => {
+      const [dr, dc] = DIR_DELTA[movementDir];
+      const next: [number, number] = [pos[0] + dr, pos[1] + dc];
+      const cell = getCell(next);
+
+      if (cell === null) {
+        pos = next;
+        visited.add(`${next[0]}-${next[1]}`);
+        sensors = readSensors(pos, dir);
+        finish("oob", oobMessage);
+        return true;
+      }
+
+      if (cell === 1) {
+        pos = next;
+        visited.add(`${next[0]}-${next[1]}`);
+        sensors = readSensors(pos, dir);
+        finish("collision", collisionMessage);
+        return true;
+      }
+
+      pos = next;
+      visited.add(`${next[0]}-${next[1]}`);
+      sensors = readSensors(pos, dir);
+      return false;
+    };
+
+    const scheduleNext = () => {
+      timerRef.current = setTimeout(tick, 450);
+    };
+
     const tick = () => {
+      if (stepCount++ > MAX_STEPS) {
+        finish("incomplete", "La simulacion alcanzo el limite de pasos permitidos.");
+        return;
+      }
+
       if (stepIdx >= blocks.length) {
-        const cell = grid[pos[0]]?.[pos[1]];
-        if (cell === 3) {
+        if (getCell(pos) === 3) {
           finish("success", "Simulacion exitosa. El robot llego a la meta.");
         } else {
           finish("incomplete", "El robot no llego a la meta. Revisa tu programa.");
@@ -149,136 +263,200 @@ export default function EditorPage() {
 
       const block = blocks[stepIdx++];
 
-      switch (block.type) {
-        case "FORWARD": {
-          const [dr, dc] = DIR_DELTA[dir];
-          const [nr, nc] = [pos[0] + dr, pos[1] + dc];
-          if (nr < 0 || nr >= 7 || nc < 0 || nc >= 7) {
-            finish("oob", "El robot salio del area permitida.");
-            return;
+      switch (block.type as BlockType) {
+        case "FORWARD":
+          for (let step = 0; step < normalizeStepCount(block.steps ?? 1); step += 1) {
+            if (moveRobot(dir, "El robot choco con un obstaculo.", "El robot salio del area permitida.")) {
+              return;
+            }
           }
-          if (grid[nr][nc] === 1) {
-            pos = [nr, nc];
-            visited.add(`${nr}-${nc}`);
-            finish("collision", "El robot choco con un obstaculo.");
-            return;
-          }
-          pos = [nr, nc];
-          visited.add(`${nr}-${nc}`);
           break;
-        }
         case "BACKWARD": {
           const backDir = ((dir + 2) % 4) as Dir;
-          const [dr, dc] = DIR_DELTA[backDir];
-          const [nr, nc] = [pos[0] + dr, pos[1] + dc];
-          if (nr < 0 || nr >= 7 || nc < 0 || nc >= 7) {
-            finish("oob", "El robot salio del area.");
-            return;
+          for (let step = 0; step < normalizeStepCount(block.steps ?? 1); step += 1) {
+            if (
+              moveRobot(backDir, "El robot choco retrocediendo.", "El robot salio del area permitida al retroceder.")
+            ) {
+              return;
+            }
           }
-          if (grid[nr][nc] === 1) {
-            finish("collision", "El robot choco retrocediendo.");
-            return;
-          }
-          pos = [nr, nc];
-          visited.add(`${nr}-${nc}`);
           break;
         }
         case "TURN_RIGHT":
           dir = ((dir + 1) % 4) as Dir;
+          sensors = readSensors(pos, dir);
           break;
         case "TURN_LEFT":
           dir = ((dir + 3) % 4) as Dir;
+          sensors = readSensors(pos, dir);
           break;
-        case "STOP":
-          finish("incomplete", "El programa detuvo el robot antes de llegar a la meta.");
-          return;
         case "WAIT":
           break;
-        case "SENSOR_F": {
-          const [dr, dc] = DIR_DELTA[dir];
-          const dist = grid[pos[0] + dr]?.[pos[1] + dc] === 1 ? 15 : 45;
-          setSim((s) => ({
-            ...s,
-            pos,
-            dir,
-            visited: new Set(visited),
-            status: "running",
-            message: `Sensor frontal: ${dist} cm`,
-          }));
-          timerRef.current = setTimeout(tick, 450);
+        case "STOP":
+          if (getCell(pos) === 3) {
+            finish("success", "Simulacion exitosa. El robot llego a la meta y se detuvo.");
+          } else {
+            finish("incomplete", "El robot se detuvo antes de llegar a la meta.");
+          }
+          return;
+        case "IF_OBS_ELSE": {
+          if (sensors.obstacleAhead) {
+            skipAfterBranch = 1;
+            syncState(
+              pos,
+              dir,
+              visited,
+              sensors,
+              "running",
+              "Obstaculo detectado: se ejecuta la respuesta del obstaculo."
+            );
+          } else {
+            stepIdx += 1;
+            syncState(
+              pos,
+              dir,
+              visited,
+              sensors,
+              "running",
+              "Sin obstaculo: se ejecuta la respuesta libre."
+            );
+          }
+          scheduleNext();
           return;
         }
+        case "WHILE_GOAL": {
+          loopStartIndex = stepIdx;
+          syncState(
+            pos,
+            dir,
+            visited,
+            sensors,
+            "running",
+            "Comienza el bucle: se repetira lo que esta debajo hasta llegar a la meta."
+          );
+          scheduleNext();
+          return;
+        }
+        case "INIT":
+          break;
         default:
           break;
       }
 
-      if (grid[pos[0]][pos[1]] === 3) {
+      if (getCell(pos) === 3 && (stopIndex === -1 || stepIdx <= stopIndex)) {
+        syncState(pos, dir, visited, sensors, "running", "");
+      } else if (getCell(pos) === 3) {
         finish("success", "Simulacion exitosa. El robot llego a la meta.");
         return;
       }
 
-      setSim({ pos, dir, visited: new Set(visited), status: "running", message: "" });
-      timerRef.current = setTimeout(tick, 450);
+      if (skipAfterBranch > 0) {
+        stepIdx += skipAfterBranch;
+        skipAfterBranch = 0;
+      }
+
+      if (loopStartIndex !== null && stepIdx === loopExitIndex && getCell(pos) !== 3) {
+        loopCount += 1;
+        if (loopCount > MAX_LOOPS) {
+          finish("incomplete", "El bucle alcanzo el limite permitido sin llegar a la meta.");
+          return;
+        }
+
+        stepIdx = loopStartIndex;
+        syncState(
+          pos,
+          dir,
+          visited,
+          sensors,
+          "running",
+          `Repitiendo el cuerpo del while (${loopCount}/${MAX_LOOPS}).`
+        );
+        scheduleNext();
+        return;
+      }
+
+      if (stepIdx >= blocks.length) {
+        if (getCell(pos) === 3) {
+          finish("success", "Simulacion exitosa. El robot llego a la meta.");
+          return;
+        }
+
+        if (loopStartIndex !== null) {
+          loopCount += 1;
+          if (loopCount > MAX_LOOPS) {
+            finish("incomplete", "El bucle alcanzo el limite permitido sin llegar a la meta.");
+            return;
+          }
+
+          stepIdx = loopStartIndex;
+          syncState(
+            pos,
+            dir,
+            visited,
+            sensors,
+            "running",
+            `Repitiendo el cuerpo del while (${loopCount}/${MAX_LOOPS}).`
+          );
+          scheduleNext();
+          return;
+        }
+
+        finish("incomplete", "El robot no llego a la meta. Revisa tu programa.");
+        return;
+      }
+
+      syncState(pos, dir, visited, sensors, "running", "");
+      scheduleNext();
     };
 
-    timerRef.current = setTimeout(tick, 450);
-  }, [program, grid]);
+    scheduleNext();
+  }, [config.start, config.startDir, getCell, normalizeStepCount, program, readSensors, syncState]);
 
-  /* ─ Grid cell renderer ─ */
-  const renderCell = (row: number, col: number) => {
-    const cell = grid[row][col];
-    const isRobot = sim.pos[0] === row && sim.pos[1] === col;
-    const isVisited = sim.visited.has(`${row}-${col}`) && !isRobot;
-    const isObstacle = cell === 1;
-    const isGoal = cell === 3;
-    const isStart = cell === 2 && !isRobot;
-
-    return (
-      <div
-        key={`${row}-${col}`}
-        className={`aspect-square rounded-sm flex items-center justify-center text-[11px] font-mono transition-colors duration-200 ${
-          isRobot
-            ? "bg-cyan-600 text-white font-bold"
-            : isObstacle
-            ? "bg-gray-600 border border-gray-500"
-            : isGoal
-            ? "bg-emerald-100 border border-emerald-400"
-            : isStart
-            ? "bg-gray-200 border border-gray-300"
-            : isVisited
-            ? "bg-cyan-100 border border-cyan-300"
-            : "bg-gray-50 border border-gray-200"
-        }`}
-      >
-        {isRobot && <span>{DIR_ARROW[sim.dir]}</span>}
-        {isGoal && !isRobot && <span className="text-emerald-700 text-[9px] font-bold">META</span>}
-        {isObstacle && <span className="text-gray-300">■</span>}
-        {isStart && <span className="text-gray-400 text-[9px]">A</span>}
-      </div>
-    );
+  const stopSim = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setSim((current) => ({ ...current, status: "idle", message: "" }));
   };
+
+  const clearProgram = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setProgram(initialProgram());
+    setSim(initialSim());
+    setCanSend(false);
+  };
+
+  if (isIntermediate) {
+    return <IntermediateLevelEditor config={config} stage={stage} missionIndex={missionIndex} />;
+  }
 
   const statusInfo = {
     idle: { color: "text-gray-500", icon: null, label: "Sin probar" },
-    running: { color: "text-cyan-600", icon: <span className="w-2 h-2 rounded-full bg-cyan-600 animate-pulse inline-block" />, label: "Ejecutando..." },
+    running: {
+      color: "text-cyan-600",
+      icon: <span className="inline-block w-2 h-2 rounded-full bg-cyan-600 animate-pulse" />,
+      label: "Ejecutando...",
+    },
     success: { color: "text-emerald-600", icon: <CheckCircle size={14} weight="fill" className="text-emerald-600" />, label: "Exito" },
     collision: { color: "text-red-600", icon: <Warning size={14} weight="fill" className="text-red-600" />, label: "Colision" },
     oob: { color: "text-amber-600", icon: <Warning size={14} weight="fill" className="text-amber-600" />, label: "Fuera del area" },
     incomplete: { color: "text-amber-600", icon: <Warning size={14} weight="fill" className="text-amber-600" />, label: "Incompleto" },
   }[sim.status];
 
+  const cellSize = gridSize;
+
   return (
     <div className="min-h-[100dvh] bg-white flex flex-col">
       <AppNav userName="Beymar" role="student" />
 
-      {/* Top bar */}
       <div className="sticky top-[52px] z-30 border-b border-gray-300/60 bg-white/95 backdrop-blur px-4 py-2.5 flex items-center justify-between gap-3">
-        <Link href={`/levels/${levelKey}/mission`} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-700 transition-colors">
+        <Link
+          href={`/levels/${levelKey}/mission`}
+          className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-700 transition-colors"
+        >
           <ArrowLeft size={13} />
           Mision
         </Link>
         <span className="text-xs font-mono text-gray-600 hidden sm:block">
-          Nivel {levelKey} - {isL2 ? "Intermedio" : "Basico"} / Editor
+          {config.level} - {config.levelSlug} / Editor
         </span>
         <div className="flex items-center gap-2">
           <button
@@ -321,16 +499,28 @@ export default function EditorPage() {
         </div>
       </div>
 
-      {/* Main 3-panel layout */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: Block palette */}
+        {/* Block palette */}
         <div className="w-[220px] lg:w-[240px] flex-shrink-0 border-r border-gray-300 bg-white overflow-y-auto">
           <div className="p-3">
-            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider mb-3 px-1">Bloques</p>
+            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider mb-2 px-1">
+              Bloques
+            </p>
+            {config.helperText && (
+              <div
+                className={`mb-3 rounded-lg border px-3 py-2 text-[11px] leading-relaxed ${
+                  isIntermediate
+                    ? "border-violet-200 bg-violet-50 text-violet-700"
+                    : "border-cyan-200 bg-cyan-50 text-cyan-700"
+                }`}
+              >
+                {config.helperText}
+              </div>
+            )}
             <div className="flex flex-col gap-1.5">
-              {palette.map((def, i) => (
+              {config.palette.map((def, i) => (
                 <button
-                  key={i}
+                  key={`${def.type}-${i}`}
                   onClick={() => addBlock(def)}
                   className={`block-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-all ${def.colorClass} hover:brightness-125`}
                 >
@@ -343,7 +533,7 @@ export default function EditorPage() {
           </div>
         </div>
 
-        {/* Center: Program editor */}
+        {/* Program editor */}
         <div className="flex-1 flex flex-col min-w-0 border-r border-gray-300">
           <div className="p-3 border-b border-gray-300/60 flex items-center justify-between">
             <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
@@ -357,7 +547,9 @@ export default function EditorPage() {
                   key={block.id}
                   className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border ${block.colorClass}`}
                 >
-                  <span className="text-[10px] font-mono text-gray-400 w-4 flex-shrink-0">{i + 1}</span>
+                  <span className="text-[10px] font-mono text-gray-400 w-4 flex-shrink-0">
+                    {i + 1}
+                  </span>
                   <span className="flex-shrink-0">{block.icon}</span>
                   <span className="text-xs font-mono flex-1">{block.label}</span>
                   {i > 0 && (
@@ -380,41 +572,126 @@ export default function EditorPage() {
           </div>
         </div>
 
-        {/* Right: 2D Simulator */}
+        {/* 2D simulator */}
         <div className="w-[280px] lg:w-[320px] flex-shrink-0 flex flex-col">
           <div className="p-3 border-b border-gray-300/60">
-            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">Simulador 2D</p>
+            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
+              Simulador 2D
+            </p>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            {/* Grid */}
             <div
               className="grid gap-1"
-              style={{ gridTemplateColumns: "repeat(7, 1fr)" }}
+              style={{ gridTemplateColumns: `repeat(${cellSize}, 1fr)` }}
             >
-              {Array.from({ length: 7 }).map((_, row) =>
-                Array.from({ length: 7 }).map((_, col) => renderCell(row, col))
+              {Array.from({ length: cellSize }).map((_, row) =>
+                Array.from({ length: cellSize }).map((_, col) => {
+                  const cell = grid[row][col];
+                  const isRobot = sim.pos[0] === row && sim.pos[1] === col;
+                  const isVisited = sim.visited.has(`${row}-${col}`) && !isRobot;
+                  const isObstacle = cell === 1;
+                  const isGoal = cell === 3;
+                  const isStart = cell === 2 && !isRobot;
+
+                  return (
+                    <div
+                      key={`${row}-${col}`}
+                      className={`aspect-square rounded-sm flex items-center justify-center text-[11px] font-mono transition-colors duration-200 ${
+                        isRobot
+                          ? "bg-cyan-600 text-white font-bold"
+                          : isObstacle
+                          ? "bg-gray-600 border border-gray-500"
+                          : isGoal
+                          ? "bg-emerald-100 border border-emerald-400"
+                          : isStart
+                          ? "bg-gray-200 border border-gray-300"
+                          : isVisited
+                          ? "bg-cyan-100 border border-cyan-300"
+                          : "bg-gray-50 border border-gray-200"
+                      }`}
+                    >
+                      {isRobot && <span>{DIR_ARROW[sim.dir]}</span>}
+                      {isGoal && !isRobot && (
+                        <span className="text-emerald-700 text-[9px] font-bold">META</span>
+                      )}
+                      {isObstacle && <span className="text-gray-300">■</span>}
+                      {isStart && <span className="text-gray-500 text-sm font-bold">{DIR_ARROW[config.startDir]}</span>}
+                    </div>
+                  );
+                })
               )}
             </div>
 
-            {/* Status */}
-            <div className={`flex items-start gap-2 text-xs p-3 rounded-lg bg-gray-50 border ${
-              sim.status === "success" ? "border-emerald-400" :
-              sim.status === "collision" || sim.status === "oob" ? "border-red-400" :
-              sim.status === "incomplete" ? "border-amber-400" :
-              sim.status === "running" ? "border-cyan-400" :
-              "border-gray-200"
-            }`}>
+            <div
+              className={`flex items-start gap-2 text-xs p-3 rounded-lg bg-gray-50 border ${
+                sim.status === "success"
+                  ? "border-emerald-400"
+                  : sim.status === "collision" || sim.status === "oob"
+                  ? "border-red-400"
+                  : sim.status === "incomplete"
+                  ? "border-amber-400"
+                  : sim.status === "running"
+                  ? "border-cyan-400"
+                  : "border-gray-200"
+              }`}
+            >
               {statusInfo.icon}
               <div>
-                <p className={`font-medium font-mono ${statusInfo.color}`}>{statusInfo.label}</p>
+                <p className={`font-medium font-mono ${statusInfo.color}`}>
+                  {statusInfo.label}
+                </p>
                 {sim.message && (
                   <p className="text-gray-600 mt-0.5 text-[11px]">{sim.message}</p>
                 )}
               </div>
             </div>
 
-            {/* Legend */}
+            {isIntermediate && (
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-3">
+                  Lecturas de sensores
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    {
+                      label: "Frontal",
+                      value: formatDistance(sim.sensors.front),
+                      accent: "text-violet-600",
+                      border: "border-violet-200",
+                    },
+                    {
+                      label: "Izquierdo",
+                      value: formatDistance(sim.sensors.left),
+                      accent: "text-amber-600",
+                      border: "border-amber-200",
+                    },
+                    {
+                      label: "Derecho",
+                      value: formatDistance(sim.sensors.right),
+                      accent: "text-cyan-600",
+                      border: "border-cyan-200",
+                    },
+                  ].map((sensor) => (
+                    <div key={sensor.label} className={`rounded-lg border ${sensor.border} bg-gray-50 p-2`}>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                        {sensor.label}
+                      </p>
+                      <p className={`text-sm font-bold font-mono ${sensor.accent}`}>
+                        {sensor.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 text-[11px] text-gray-500 font-mono flex items-center justify-between gap-2">
+                  <span>Via frontal</span>
+                  <span className={sim.sensors.obstacleAhead ? "text-red-600" : "text-emerald-600"}>
+                    {sim.sensors.obstacleAhead ? "Obstaculo detectado" : "Libre"}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col gap-1.5 text-[11px] font-mono text-gray-500">
               <p className="text-[10px] uppercase tracking-wider mb-1">Leyenda</p>
               {[
@@ -430,21 +707,21 @@ export default function EditorPage() {
               ))}
             </div>
 
-            {/* Direction indicator */}
             <div className="text-[11px] font-mono text-gray-500">
               <span className="text-[10px] uppercase tracking-wider">Direccion: </span>
-              <span className="text-cyan-600">{DIR_ARROW[sim.dir]} {["Derecha", "Abajo", "Izquierda", "Arriba"][sim.dir]}</span>
+              <span className="text-cyan-600">
+                {DIR_ARROW[sim.dir]} {['Derecha', 'Abajo', 'Izquierda', 'Arriba'][sim.dir]}
+              </span>
             </div>
           </div>
 
-          {/* Send to robot button (mobile version) */}
           {canSend && (
             <div className="p-3 border-t border-emerald-300 bg-emerald-50">
               <button
                 onClick={() => router.push("/robot")}
                 className="btn-press w-full flex items-center justify-center gap-2 text-xs font-semibold text-white bg-emerald-600 py-2.5 rounded-lg hover:bg-emerald-500 transition-colors"
               >
-                <Robot size={14} weight="duotone" />
+                <Cpu size={14} weight="duotone" />
                 Enviar al robot fisico
               </button>
             </div>
