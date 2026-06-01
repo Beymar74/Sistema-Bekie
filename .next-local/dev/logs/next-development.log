@@ -1,0 +1,9 @@
+{"timestamp":"00:00:00.739","source":"Server","level":"LOG","message":""}
+{"timestamp":"00:00:00.739","source":"Server","level":"LOG","message":"  We detected TypeScript in your project and reconfigured your tsconfig.json file for you."}
+{"timestamp":"00:00:00.739","source":"Server","level":"LOG","message":"  The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:\n"}
+{"timestamp":"00:00:00.739","source":"Server","level":"LOG","message":"  \t- include was updated to add '.next-local/types/**/*.ts'"}
+{"timestamp":"00:00:00.739","source":"Server","level":"LOG","message":"  \t- include was updated to add '.next-local/dev/types/**/*.ts'"}
+{"timestamp":"00:00:00.739","source":"Server","level":"LOG","message":""}
+{"timestamp":"00:00:00.948","source":"Server","level":"LOG","message":""}
+{"timestamp":"00:00:04.205","source":"Server","level":"LOG","message":"○ Compiling /levels ..."}
+{"timestamp":"00:00:07.004","source":"Browser","level":"INFO","message":"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"}
