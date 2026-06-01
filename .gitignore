@@ -45,3 +45,9 @@ next-env.d.ts
 
 #Claude md
 CLAUDE.md
+
+# Turbopack y builds de Next.js
+dist-build/
+.next/
+.turbo/
+*.sst

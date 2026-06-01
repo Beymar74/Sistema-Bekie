@@ -425,7 +425,14 @@ export default function EditorPage() {
   };
 
   if (isIntermediate) {
-    return <IntermediateLevelEditor config={config} stage={stage} missionIndex={missionIndex} />;
+    return (
+      <IntermediateLevelEditor
+        key={missionIndex}
+        config={config}
+        stage={stage}
+        missionIndex={missionIndex}
+      />
+    );
   }
 
   const statusInfo = {

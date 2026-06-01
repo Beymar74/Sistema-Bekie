@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { motion } from "motion/react";
 import AppNav from "@/components/AppNav";
 import {
   ArrowLeft,
@@ -22,6 +23,8 @@ import {
   type MissionStage,
   type PaletteBlock,
 } from "@/lib/levels";
+
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 type CompilerStatus = "idle" | "success" | "error";
 type TutorialTarget = "palette" | "program" | "compile" | "load";
@@ -94,16 +97,16 @@ const EMPTY_BLOCKS: BlockType[] = [];
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
     title: "Paso 1",
-    text: "Tu programa ya empieza con Iniciar mision. Ahora pulsa Si hay obstaculo / Si no hay obstaculo para ver una sola estructura con dos respuestas. Cuando lo hagas, avanzaremos automaticamente al siguiente paso.",
+    text: "Tu programa ya empieza con Iniciar mision. Ahora pulsa Si hay obstaculo / Si no hay obstaculo para abrir la decision y completar sus dos respuestas. Cuando lo hagas, avanzaremos automaticamente al siguiente paso.",
     target: "palette",
-    lockText: "Agrega el bloque de dos respuestas para desbloquear el siguiente paso.",
+    lockText: "Agrega la respuesta del obstaculo y la respuesta libre para desbloquear el siguiente paso.",
     blocksToPress: ["IF_OBS_ELSE"],
   },
   {
     title: "Paso 2",
-    text: "Ahora pulsa Girar derecha para completar la respuesta del obstaculo. En la rama de Si no hay obstaculo puedes usar otra accion util, no necesariamente Esperar. Luego agrega Avanzar para llegar a la meta y termina con Detener para cerrar el programa correctamente. Al terminar, pasaremos solos al siguiente paso.",
+    text: "Ahora pulsa Girar derecha para la respuesta del obstaculo y Avanzar para la respuesta libre. Luego agrega un Avanzar simple fuera de la decision para llegar a la meta y termina con Detener para cerrar el programa correctamente. Al terminar, pasaremos solos al siguiente paso.",
     target: "palette",
-    lockText: "Agrega Girar derecha, una respuesta libre valida, Avanzar y Detener para continuar.",
+    lockText: "Agrega la respuesta libre con Avanzar, el Avanzar final sin numero y Detener para continuar.",
     blocksToPress: ["TURN_RIGHT", "FORWARD", "STOP"],
   },
   {
@@ -141,8 +144,9 @@ export default function IntermediateLevelEditor({
     issues: [],
     highlightIndexes: [],
   });
-  const [tutorialVisible, setTutorialVisible] = useState(showTutorial);
+  const [tutorialVisible, setTutorialVisible] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
+  const [scenarioIntroVisible, setScenarioIntroVisible] = useState(true);
   const [focusRect, setFocusRect] = useState<{
     top: number;
     left: number;
@@ -153,11 +157,6 @@ export default function IntermediateLevelEditor({
   const programRef = useRef<HTMLDivElement | null>(null);
   const compileRef = useRef<HTMLButtonElement | null>(null);
   const loadRef = useRef<HTMLButtonElement | null>(null);
-
-  const matchesSequencePrefix = useCallback(
-    (expected: BlockType[]) => expected.every((type, index) => program[index]?.type === type),
-    [program]
-  );
 
   const normalizeStepCount = useCallback((value: number) => {
     if (!Number.isFinite(value)) return 1;
@@ -227,13 +226,18 @@ export default function IntermediateLevelEditor({
 
     switch (tutorialStep) {
       case 0:
-        return matchesSequencePrefix(["INIT", "IF_OBS_ELSE"]);
+        return (
+          program.length === 2 &&
+          program[0]?.type === "INIT" &&
+          program[1]?.type === "IF_OBS_ELSE"
+        );
       case 1:
         return (
+          program.length === 6 &&
           program[0]?.type === "INIT" &&
           program[1]?.type === "IF_OBS_ELSE" &&
           program[2]?.type === "TURN_RIGHT" &&
-          (program[3]?.type === "WAIT" || program[3]?.type === "TURN_RIGHT") &&
+          program[3]?.type === "FORWARD" &&
           program[4]?.type === "FORWARD" &&
           program[5]?.type === "STOP"
         );
@@ -244,7 +248,7 @@ export default function IntermediateLevelEditor({
       default:
         return false;
     }
-  }, [compilerResult.status, currentTutorialStep, matchesSequencePrefix, program, tutorialStep]);
+  }, [compilerResult.status, currentTutorialStep, program, tutorialStep]);
 
   useEffect(() => {
     if (!showTutorial || !tutorialVisible || !currentTutorialStep) return;
@@ -494,7 +498,7 @@ export default function IntermediateLevelEditor({
   const renderProgramItems = (
     items: ProgramViewItem[],
     nested = false,
-    allowSteps = true
+    allowSteps = false
   ): ReactNode[] =>
     items.map((item) => {
       if (item.kind === "block") {
@@ -661,21 +665,6 @@ export default function IntermediateLevelEditor({
         if (!Number.isInteger(block.steps ?? 1) || (block.steps ?? 1) < 1) {
           pushIssue(`El bloque "${BLOCK_LABELS[block.type]}" necesita un numero mayor que 0.`, index);
         }
-      }
-    });
-
-    program.forEach((block, index) => {
-      if (block.type !== "FORWARD") return;
-
-      const isConditionalBranch = index === 1 || index === 2;
-      const isWhileBody = whileIndexInProgram !== -1 && index === whileIndexInProgram + 1;
-
-      if (!isConditionalBranch && (block.steps ?? 1) !== 1) {
-        pushIssue("Los bloques Avanzar fuera de la condicion deben avanzar solo una casilla.", index);
-      }
-
-      if (isWhileBody && (block.steps ?? 1) !== 1) {
-        pushIssue("Mientras no llegue solo puede contener un Avanzar de una casilla.", index);
       }
     });
 
@@ -974,11 +963,11 @@ export default function IntermediateLevelEditor({
   const paletteHint = useMemo(
     () => {
       if (stage.id === 1) {
-        return "En esta misión usa Si hay obstaculo / Si no hay obstaculo para aprender la estructura de dos respuestas. El avance simple queda como cierre del tutorial.";
+        return "En esta misión usa Si hay obstaculo / Si no hay obstaculo para aprender la estructura de dos respuestas. La rama del obstaculo gira, la rama libre avanza con N y el Avanzar final va fuera de la decision sin numero.";
       }
 
       if (stage.id === 2) {
-        return "En esta misión usa Si hay obstaculo / Si no hay obstaculo como una sola estructura con dos respuestas. La rama libre no tiene por qué ser Esperar y el avance numerado solo aparece cuando la ruta lo necesita.";
+        return "En esta misión usa Si hay obstaculo / Si no hay obstaculo como una sola estructura con dos respuestas distintas. La rama del obstaculo y la libre deben diferir, y después de la decision dos Avanzar sueltos completan la salida.";
       }
 
       if (stage.id === 3) {
@@ -986,13 +975,20 @@ export default function IntermediateLevelEditor({
       }
 
       if (stage.id === 4 || stage.id === 5) {
-        return "En esta misión combina Si hay obstaculo / Si no hay obstaculo con Mientras no llegue. El numero en Avanzar solo se activa dentro de la ruta que realmente se repite.";
+        return "En esta misión combina Si hay obstaculo / Si no hay obstaculo con Mientras no llegue. El numero en Avanzar se usa en la ruta que realmente se repite.";
       }
 
       return "La mision requiere una secuencia mas completa y ordenada.";
     },
     [stage.id]
   );
+
+  const dismissScenarioIntro = () => {
+    setScenarioIntroVisible(false);
+    if (showTutorial) {
+      setTutorialVisible(true);
+    }
+  };
 
   const tutorialText =
     currentTutorialStep?.target === "load" && compilerResult.status !== "success"
@@ -1371,6 +1367,95 @@ export default function IntermediateLevelEditor({
             </div>
           </div>
         </div>
+      )}
+
+      {scenarioIntroVisible && (
+        <motion.div
+          className="fixed inset-0 z-[90] flex cursor-pointer items-center justify-center bg-black/75 px-4 py-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.25, ease: EASE_OUT }}
+          onClick={dismissScenarioIntro}
+        >
+          <motion.div
+            className="w-full max-w-5xl rounded-[28px] border border-white/20 bg-white shadow-2xl overflow-hidden"
+            initial={{ scale: 0.94, y: 18, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            transition={{ duration: 0.32, ease: EASE_OUT }}
+          >
+            <div className="bg-violet-50/85 border-b border-violet-200 px-5 py-4">
+              <p className="text-[10px] font-mono text-violet-700 uppercase tracking-[0.3em] mb-2">
+                Presiona en cualquier lugar para continuar
+              </p>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{stage.scenarioLabel}</p>
+                  <p className="text-2xl font-bold tracking-tight text-gray-900 mt-1">
+                    {stage.title}
+                  </p>
+                </div>
+                <p className="text-xs font-mono px-2.5 py-1 rounded-full bg-violet-400/10 text-violet-700 flex-shrink-0">
+                  {stage.difficulty}
+                </p>
+              </div>
+              <p className="mt-2 text-sm text-gray-600 leading-relaxed">{stage.summary}</p>
+            </div>
+
+            <div className="p-5">
+              <div
+                className="grid gap-1.5"
+                style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
+              >
+                {Array.from({ length: gridSize }).map((_, row) =>
+                  Array.from({ length: gridSize }).map((_, col) => {
+                    const cell = stage.grid[row][col];
+                    const isStart = cell === 2;
+                    const isGoal = cell === 3;
+                    const isObstacle = cell === 1;
+
+                    return (
+                      <div
+                        key={`intro-${row}-${col}`}
+                        className={`aspect-square rounded-md flex items-center justify-center text-[11px] font-mono ${
+                          isObstacle
+                            ? "bg-gray-600 border border-gray-500"
+                            : isGoal
+                            ? "bg-emerald-100 border border-emerald-400"
+                            : isStart
+                            ? "bg-gray-200 border border-gray-300"
+                            : "bg-gray-50 border border-gray-200"
+                        }`}
+                      >
+                        {isGoal && (
+                          <span className="text-emerald-700 text-[9px] font-bold">META</span>
+                        )}
+                        {isObstacle && <span className="text-gray-300">■</span>}
+                        {isStart && (
+                          <span className="text-gray-500 text-sm font-bold">
+                            {config.startDir === 0
+                              ? "→"
+                              : config.startDir === 1
+                              ? "↓"
+                              : config.startDir === 2
+                              ? "←"
+                              : "↑"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <p className="mt-4 text-sm text-gray-700 leading-relaxed">
+                {stage.objective}
+              </p>
+              <p className="mt-2 text-xs text-violet-700 leading-relaxed">
+                Construye este escenario para realizar las pruebas.
+              </p>
+            </div>
+          </motion.div>
+        </motion.div>
       )}
     </div>
   );
