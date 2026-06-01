@@ -18,7 +18,7 @@ const fadeUp = {
 export default function ResultsPage() {
   const result = {
     success: true,
-    level: 1,
+    level: 0,
     levelName: "Basico",
     mission: "Movimiento basico",
     time: "00:48",
@@ -164,7 +164,7 @@ export default function ResultsPage() {
               <>
                 <motion.div variants={fadeUp}>
                   <Link
-                    href="/levels"
+                    href="/levels/2/mission"
                     className="btn-press flex items-center justify-center gap-2 w-full bg-cyan-600 text-white font-bold text-sm py-3.5 rounded-xl hover:bg-cyan-700 transition-colors"
                   >
                     Siguiente nivel
