@@ -1,9 +1,4 @@
-import {
-  ArrowRight,
-  CheckCircle,
-  Cpu,
-  Warning,
-} from "@phosphor-icons/react";
+import { CheckCircle, Cpu, Warning } from "@phosphor-icons/react";
 import { BASIC_PALETTE, type EditorLevelContent, type MissionContent, type MissionStage } from "@/lib/levels";
 
 const INTERMEDIATE_PALETTE = [
@@ -18,12 +13,6 @@ const INTERMEDIATE_PALETTE = [
       </span>
     ),
   },
-  {
-    type: "WHILE_GOAL",
-    label: "Mientras no llegue",
-    colorClass: "border-amber-300 bg-amber-50 text-amber-700",
-    icon: <ArrowRight size={14} weight="bold" />,
-  },
 ] satisfies EditorLevelContent["palette"];
 
 export const LEVEL_2_STAGES: MissionStage[] = [
@@ -32,7 +21,7 @@ export const LEVEL_2_STAGES: MissionStage[] = [
     title: "Cruce inicial",
     difficulty: "Facil",
     objective:
-      "Aprende a usar una estructura if/else simple y a cerrar la ruta con un avance fuera de la decision.",
+      "Aprende a usar una estructura if/else simple: si el camino esta libre, avanzas en esa rama y luego cierras la ruta con otro avance fuera de la decision.",
     summary:
       "El tutorial te guia paso a paso: completas una decision con dos respuestas y luego usas un avance simple fuera de la condicion para llegar a la meta.",
     scenarioLabel: "Escenario 1 / Tutorial",
@@ -46,7 +35,7 @@ export const LEVEL_2_STAGES: MissionStage[] = [
     requiredSequence: ["INIT", "IF_OBS_ELSE", "TURN_RIGHT", "FORWARD", "FORWARD", "STOP"],
     learningOutcomes: [
       "Usar una sola estructura if/else para dos respuestas distintas.",
-      "Responder con un giro si hay obstaculo y con un avance si el camino esta libre.",
+      "Responder con un giro si hay obstaculo y con un avance numerado si el camino esta libre.",
       "Usar un avance simple fuera de la condicion para alcanzar la meta.",
     ],
     instructions: [
@@ -146,46 +135,47 @@ export const LEVEL_2_STAGES: MissionStage[] = [
   },
   {
     id: 4,
-    title: "Ruta repetible",
+    title: "Ruta larga",
     difficulty: "Alta",
     objective:
-      "Combina una condicion inicial con un while para bajar por un pasillo vertical cerrado.",
+      "Combina una condicion inicial con varios avances rectos para recorrer un pasillo largo hasta la meta.",
     summary:
-      "El robot corrige el desvio con una decision y luego repite un avance numerado hasta la meta inferior.",
-    scenarioLabel: "Escenario 4 / 6x6",
+      "El robot corrige el desvio con una decision y luego avanza varias casillas en linea recta hasta la meta inferior.",
+    scenarioLabel: "Escenario 4 / 5x5",
     grid: [
-      [0, 1, 2, 0, 1, 0],
-      [0, 1, 0, 0, 1, 0],
-      [0, 1, 0, 1, 0, 0],
-      [0, 1, 0, 1, 0, 0],
-      [0, 1, 0, 1, 0, 0],
-      [0, 1, 3, 1, 0, 0],
+      [2, 1, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [3, 0, 0, 0, 0],
     ],
     requiredSequence: [
       "INIT",
       "IF_OBS_ELSE",
-      "TURN_LEFT",
       "TURN_RIGHT",
+      "TURN_LEFT",
       "FORWARD",
-      "WHILE_GOAL",
+      "FORWARD",
+      "FORWARD",
       "FORWARD",
       "STOP",
     ],
     learningOutcomes: [
       "Usar una condicion para corregir la salida inicial.",
-      "Repetir una ruta vertical con un bucle.",
-      "Usar un avance numerado dentro del while para recorrer el tramo final.",
+      "Encadenar varios avances despues de la decision.",
+      "Contar cuantas casillas debe avanzar el robot en linea recta.",
     ],
     instructions: [
       "Usa Si hay obstaculo / Si no hay obstaculo para corregir la salida inicial.",
-      "Despues coloca Mientras no llegue y repite el avance numerado hasta la meta de abajo.",
-      "No hace falta Esperar; la secuencia debe terminar con Detener.",
+      "Despues de la decision, agrega los Avanzar necesarios en linea recta hasta la meta de abajo.",
+      "Cada Avanzar suelto mueve una casilla; cuenta el pasillo antes de compilar.",
+      "Cierra con Detener al final.",
     ],
     victory:
-      "La secuencia debe abrirse con una decision y cerrar con un while que repite un avance numerado hasta la meta inferior.",
+      "La secuencia debe abrirse con una decision y cerrar con cuatro avances rectos que lleven al robot hasta la meta inferior.",
     tips: [
-      "La rama correcta de la condicion te deja alineado con el corredor vertical.",
-      "El while cierra el tramo final bajando por la misma columna.",
+      "La rama correcta de la condicion te deja mirando hacia el pasillo.",
+      "Cuenta las casillas libres entre el desvio y la meta.",
       "Detener debe quedar al final como salida segura del programa.",
     ],
   },
@@ -194,9 +184,9 @@ export const LEVEL_2_STAGES: MissionStage[] = [
     title: "Desafio final",
     difficulty: "Final",
     objective:
-      "Cierra el nivel con una condicion inicial y un while que repite un tramo recto al final de una ruta en zigzag.",
+      "Cierra el nivel con una condicion inicial y una ruta en zigzag hecha solo con giros y avances.",
     summary:
-      "La ruta final combina un zigzag corto con un while que repite el ultimo tramo recto hasta la meta.",
+      "La ruta final combina un zigzag corto con un tramo recto final hasta la meta, usando solo if/else y movimiento.",
     scenarioLabel: "Escenario 5 / 6x6",
     grid: [
       [2, 1, 0, 1, 0, 0],
@@ -218,26 +208,27 @@ export const LEVEL_2_STAGES: MissionStage[] = [
       "FORWARD",
       "TURN_LEFT",
       "FORWARD",
-      "WHILE_GOAL",
+      "FORWARD",
       "FORWARD",
       "STOP",
     ],
     learningOutcomes: [
-      "Unir una condicion con un while que repite la distancia final.",
+      "Unir una condicion inicial con una ruta larga de giros y avances.",
       "Resolver una ruta en zigzag sin perder el orden de las acciones.",
-      "Usar el while para completar el tramo recto que lleva a la meta.",
+      "Completar el tramo recto final con los avances exactos.",
     ],
     instructions: [
       "Primero resuelve la salida con Si hay obstaculo / Si no hay obstaculo.",
-      "Luego encadena el zigzag y abre Mientras no llegue para repetir el tramo final recto.",
-      "La respuesta libre no necesita Esperar; cierra con Detener.",
+      "Luego encadena el zigzag con giros alternados y avances de una casilla.",
+      "Al final agrega los Avanzar rectos que faltan para llegar a la meta.",
+      "Cierra con Detener.",
     ],
     victory:
-      "La secuencia final debe mezclar una decision inicial, un zigzag corto y un while con un cuerpo repetible que lleve la ruta hasta la meta.",
+      "La secuencia final debe mezclar una decision inicial, un zigzag corto y avances rectos finales que lleven la ruta hasta la meta.",
     tips: [
       "El orden de los bloques importa mucho mas que en las misiones anteriores.",
       "Busca una ruta base que termine apuntando directo a la meta.",
-      "El while funciona como una repeticion del ultimo tramo recto.",
+      "Cuenta los avances del tramo final sin usar bucles.",
     ],
   },
 ];
@@ -251,21 +242,21 @@ export const LEVEL_MISSIONS: Record<"2", MissionContent> = {
     icon: <Cpu size={24} weight="duotone" />,
     accent: "violet",
     objective:
-      "Aprende a construir secuencias con condicionales y bucles, mientras el robot reacciona a los obstaculos y avanza hacia metas ubicadas en esquinas cada vez mas lejanas.",
+      "Aprende a construir secuencias con condicionales if/else mientras el robot reacciona a los obstaculos y avanza hacia metas cada vez mas lejanas.",
     learningOutcomes: [
       "Usar una estructura if/else para responder a obstaculos.",
-      "Entender como cambia la ruta cuando el tutorial de la primera mision se completa solo y las siguientes suben la dificultad.",
-      "Combinar condicion, correccion y bucles paso a paso.",
+      "Entender que la mision 1 es un tutorial guiado y que las siguientes ya se resuelven de forma autonoma.",
+      "Combinar condicion, correccion y avances encadenados paso a paso.",
     ],
     instructions: [
-      "La primera mision funciona como tutorial y avanza sola cuando completas cada paso.",
-      "Desde la mision 3, las rutas combinan condicionales y, mas adelante, while.",
-      "Usa las decisiones y los bucles para describir el comportamiento correcto del robot.",
-      "Cuando aparezca dentro de una rama o un bucle, el numero en Avanzar define cuantas casillas recorrera el robot.",
+      "La primera mision funciona como tutorial guiado; las siguientes ya no usan esa ayuda paso a paso.",
+      "Desde la mision 2, las rutas combinan condicionales y mas avances en linea recta.",
+      "Usa las decisiones para describir el comportamiento correcto del robot.",
+      "Cuando aparezca dentro de una rama, el numero en Avanzar define cuantas casillas recorrera el robot.",
       "Compila la secuencia para comprobar que el robot realmente llega a la meta de cada escenario.",
     ],
     victory:
-      "La primera mision sirve de introduccion automatica. Despues, cada reto agrega un poco mas de complejidad hasta dominar condicionales, correcciones y bucles.",
+      "La primera mision sirve de introduccion guiada. Despues, cada reto agrega un poco mas de complejidad hasta dominar condicionales y rutas largas.",
     blocks: [
       "Iniciar mision",
       "Avanzar",
@@ -275,17 +266,25 @@ export const LEVEL_MISSIONS: Record<"2", MissionContent> = {
       "Esperar",
       "Detener",
       "Si hay obstaculo / Si no hay obstaculo",
-      "Mientras no llegue",
     ],
     tips: [
       "La primera mision se abre sola cuando completas el tutorial.",
       "Esperar sigue siendo una pausa opcional, pero no es el centro del nivel.",
-      "El numero en Avanzar solo aparece dentro de ramas o bucles; fuera de una decision el bloque avanza una sola casilla.",
-      "Mientras no llegue abre una seccion de repeticion, no un cierre de programa.",
+      "El numero en Avanzar solo aparece dentro de ramas; fuera de una decision el bloque avanza una sola casilla.",
       "Cada mision agrega un pequeno salto de dificultad para que el aprendizaje sea gradual.",
     ],
   },
 };
+
+function findGridStart(grid: number[][]): [number, number] {
+  for (let row = 0; row < grid.length; row += 1) {
+    const col = grid[row].indexOf(2);
+    if (col !== -1) {
+      return [row, col];
+    }
+  }
+  return [0, 0];
+}
 
 export const LEVEL_EDITORS: Record<"2", EditorLevelContent> = {
   "2": {
@@ -294,10 +293,10 @@ export const LEVEL_EDITORS: Record<"2", EditorLevelContent> = {
     levelSlug: "Intermedio",
     accent: "violet",
     grid: LEVEL_2_STAGES[0].grid,
-    start: [0, 0],
+    start: findGridStart(LEVEL_2_STAGES[0].grid),
     startDir: 0,
     palette: [...BASIC_PALETTE, ...INTERMEDIATE_PALETTE],
     helperText:
-      "Compilador de decisiones: arma condicionales con dos respuestas, usa Avanzar numerado solo dentro de ramas o while y deja los Avanzar sueltos sin numero.",
+      "Compilador de decisiones: arma condicionales con dos respuestas, usa Avanzar numerado solo dentro de ramas y deja los Avanzar sueltos sin numero.",
   },
 };

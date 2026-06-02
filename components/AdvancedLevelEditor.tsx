@@ -465,7 +465,7 @@ export default function AdvancedLevelEditor({
   ) => {
     const isHighlighted = compilerResult.highlightIndexes.includes(index);
     const nested = options?.nested ?? false;
-    const showSteps = (options?.allowSteps ?? nested) && block.type === "FORWARD";
+    const showSteps = block.type === "FORWARD";
 
     return (
       <div
@@ -1049,7 +1049,7 @@ export default function AdvancedLevelEditor({
               }}
               className="btn-press bg-indigo-600 hover:bg-indigo-750 text-white font-bold text-sm py-3.5 rounded-2xl shadow-lg shadow-indigo-600/20 transition-all duration-200 w-full"
             >
-              Comenzar Tutorial
+              {showTutorial ? "Comenzar tutorial" : "Comenzar mision"}
             </button>
           </div>
         </div>

@@ -10,6 +10,7 @@ import { type LevelKey } from "@/lib/levels";
 import { LEVEL_0_STAGES, LEVEL_MISSIONS as BASIC_LEVEL_MISSIONS } from "@/lib/nivel-0";
 import { LEVEL_2_STAGES, LEVEL_MISSIONS as INTERMEDIATE_LEVEL_MISSIONS } from "@/lib/nivel-1";
 import { LEVEL_3_STAGES, LEVEL_MISSIONS as ADVANCED_LEVEL_MISSIONS } from "@/lib/nivel-2";
+import { readMissionProgress, subscribeMissionProgress } from "@/lib/progress";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 export default function MissionPage() {
@@ -26,30 +27,24 @@ export default function MissionPage() {
     : BASIC_LEVEL_MISSIONS["1"];
   const isViolet = mission.accent === "violet";
 
+  const progressKey = isAdvanced
+    ? "bekie-level-3-progress"
+    : isIntermediate
+    ? "bekie-level-2-progress"
+    : "bekie-level-0-progress";
+  const stages = isAdvanced
+    ? LEVEL_3_STAGES
+    : isIntermediate
+    ? LEVEL_2_STAGES
+    : LEVEL_0_STAGES;
+
   const unlockedMission = useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof window === "undefined") return () => undefined;
-      window.addEventListener("storage", onStoreChange);
-      return () => window.removeEventListener("storage", onStoreChange);
-    },
-    () => {
-      if (typeof window === "undefined") return 1;
-      const key = isAdvanced
-        ? "bekie-level-3-progress"
-        : isIntermediate
-        ? "bekie-level-2-progress"
-        : "bekie-level-0-progress";
-      const stages = isAdvanced
-        ? LEVEL_3_STAGES
-        : isIntermediate
-        ? LEVEL_2_STAGES
-        : LEVEL_0_STAGES;
-      const stored = Number(window.localStorage.getItem(key) ?? "1");
-      const safeValue = Number.isNaN(stored) ? 1 : stored;
-      return Math.min(stages.length, Math.max(1, safeValue));
-    },
-    () => 1
+    subscribeMissionProgress,
+    () => readMissionProgress(progressKey, stages.length),
+    () => 0
   );
+  const completedMissionCount = Math.min(unlockedMission, stages.length);
+  const nextMission = Math.min(completedMissionCount + 1, stages.length);
 
   if (isAdvanced) {
     return (
@@ -103,15 +98,15 @@ export default function MissionPage() {
                     El nivel se desbloquea paso a paso. La primera mision es el tutorial y las
                     siguientes van aumentando la dificultad.
                   </p>
-                  <div className="mb-4 flex items-center justify-between text-xs font-mono text-gray-500">
-                    <span>Misiones desbloqueadas</span>
-                    <span>
-                      {unlockedMission}/{LEVEL_3_STAGES.length}
-                    </span>
+                <div className="mb-4 flex items-center justify-between text-xs font-mono text-gray-500">
+                  <span>Misiones completadas</span>
+                  <span>
+                    {completedMissionCount}/{LEVEL_3_STAGES.length}
+                  </span>
                   </div>
                   <div className="grid gap-3">
                     {LEVEL_3_STAGES.map((stage) => {
-                      const unlocked = stage.id <= unlockedMission;
+                      const unlocked = stage.id <= nextMission;
                       return (
                         <div
                           key={stage.id}
@@ -313,15 +308,15 @@ export default function MissionPage() {
                     El nivel se desbloquea paso a paso. La primera mision es la mas simple y las
                     siguientes van aumentando la dificultad.
                   </p>
-                  <div className="mb-4 flex items-center justify-between text-xs font-mono text-gray-500">
-                    <span>Misiones desbloqueadas</span>
-                    <span>
-                      {unlockedMission}/{LEVEL_2_STAGES.length}
-                    </span>
+                <div className="mb-4 flex items-center justify-between text-xs font-mono text-gray-500">
+                  <span>Misiones completadas</span>
+                  <span>
+                    {completedMissionCount}/{LEVEL_2_STAGES.length}
+                  </span>
                   </div>
                   <div className="grid gap-3">
                     {LEVEL_2_STAGES.map((stage) => {
-                      const unlocked = stage.id <= unlockedMission;
+                      const unlocked = stage.id <= nextMission;
                       return (
                         <div
                           key={stage.id}
@@ -519,12 +514,12 @@ export default function MissionPage() {
                   El nivel tiene 5 misiones secuenciales. Completa cada mision para desbloquear la siguiente.
                 </p>
                 <div className="mb-4 flex items-center justify-between text-xs font-mono text-gray-500">
-                  <span>Misiones desbloqueadas</span>
-                  <span>{unlockedMission}/{LEVEL_0_STAGES.length}</span>
+                  <span>Misiones completadas</span>
+                  <span>{completedMissionCount}/{LEVEL_0_STAGES.length}</span>
                 </div>
                 <div className="grid gap-3">
                   {LEVEL_0_STAGES.map((stage) => {
-                    const unlocked = stage.id <= unlockedMission;
+                    const unlocked = stage.id <= nextMission;
                     return (
                       <div
                         key={stage.id}

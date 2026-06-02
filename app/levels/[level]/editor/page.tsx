@@ -23,6 +23,7 @@ import {
   type LevelKey,
   type PaletteBlock,
 } from "@/lib/levels";
+import { unlockMissionAfterComplete } from "@/lib/progress";
 import {
   LEVEL_0_STAGES,
   LEVEL_EDITORS as BASIC_LEVEL_EDITORS,
@@ -300,12 +301,11 @@ export default function EditorPage() {
       if (status === "success") {
         setCanSend(true);
         if (isBasic && typeof window !== "undefined") {
-          const key = "bekie-level-0-progress";
-          const stored = Number(window.localStorage.getItem(key) ?? "1");
-          const current = Number.isNaN(stored) ? 1 : stored;
-          const next = Math.min(LEVEL_0_STAGES.length, Math.max(current, missionIndex + 1));
-          window.localStorage.setItem(key, String(next));
-          window.dispatchEvent(new Event("storage"));
+          unlockMissionAfterComplete(
+            "bekie-level-0-progress",
+            missionIndex,
+            LEVEL_0_STAGES.length
+          );
         }
       }
     };
@@ -521,10 +521,21 @@ export default function EditorPage() {
   };
 
   if (isIntermediate) {
+    const intermediateStart: [number, number] = (() => {
+      for (let row = 0; row < stage.grid.length; row += 1) {
+        for (let col = 0; col < stage.grid[row].length; col += 1) {
+          if (stage.grid[row][col] === 2) {
+            return [row, col];
+          }
+        }
+      }
+      return config.start;
+    })();
+
     return (
       <IntermediateLevelEditor
         key={missionIndex}
-        config={config}
+        config={{ ...config, grid: stage.grid, start: intermediateStart }}
         stage={stage}
         missionIndex={missionIndex}
       />
