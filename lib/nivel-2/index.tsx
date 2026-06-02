@@ -1,23 +1,16 @@
-"use client";
-
 import {
+  ArrowRight,
   CheckCircle,
   Cpu,
-  Repeat,
   Warning,
+  Repeat,
+  Flag,
 } from "@phosphor-icons/react";
-import {
-  BASIC_PALETTE,
-  type EditorLevelContent,
-  type MissionContent,
-  type MissionStage,
-} from "@/lib/levels";
-export type { MissionStage };
+import { BASIC_PALETTE, type EditorLevelContent, type MissionContent, type MissionStage, type PaletteBlock } from "@/lib/levels";
 
-// ── Paleta del Nivel 2 (sin WHILE) ───────────────────────────────────────────
-export const ADVANCED_PALETTE = [
+const ADVANCED_PALETTE: PaletteBlock[] = [
   {
-    type: "IF_OBS_ELSE" as const,
+    type: "IF_OBS_ELSE",
     label: "Si hay obstaculo / Si no hay obstaculo",
     colorClass: "border-amber-300 bg-amber-50 text-amber-700",
     icon: (
@@ -28,292 +21,215 @@ export const ADVANCED_PALETTE = [
     ),
   },
   {
-    type: "FOR_REPEAT" as const,
+    type: "REPEAT",
     label: "Repetir N veces",
     colorClass: "border-indigo-300 bg-indigo-50 text-indigo-700",
     icon: <Repeat size={14} weight="bold" />,
   },
 ];
 
-// ── 5 misiones: For + If/Else, grillas 5x5 ───────────────────────────────────
 export const LEVEL_3_STAGES: MissionStage[] = [
-  // ── Mision 1: Tutorial For ────────────────────────────────────────────────
   {
     id: 1,
     title: "Intro al bucle For",
     difficulty: "Facil",
-    objective:
-      "Aprende a usar Repetir N veces para avanzar varias celdas sin escribir el mismo bloque varias veces.",
-    summary:
-      "Tutorial guiado: en lugar de poner cuatro Avanzar seguidos, usas un For con N=4 que los reemplaza automaticamente.",
-    scenarioLabel: "Escenario 1 / Tutorial",
-    // Robot en (0,0) mirando derecha → meta en (0,4)
+    objective: "Aprende a usar un bucle For para repetir una accion un numero exacto de veces.",
+    summary: "Tutorial guiado: en lugar de escribir 17 bloques de codigo, usaras un For con N=4 para subir la escalera.",
+    scenarioLabel: "ESCENARIO 1 / TUTORIAL",
     grid: [
-      [2, 0, 0, 0, 3],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
+      [2, 0, 1, 1, 1],
+      [1, 0, 0, 1, 1],
+      [1, 1, 0, 0, 1],
+      [1, 1, 1, 0, 0],
+      [1, 1, 1, 1, 3],
     ],
-    requiredSequence: ["INIT", "FOR_REPEAT", "FORWARD", "STOP"],
+    requiredSequence: ["INIT", "REPEAT", "FORWARD", "TURN_RIGHT", "FORWARD", "TURN_LEFT", "STOP"],
     learningOutcomes: [
-      "Entender que For N veces repite el bloque siguiente N veces.",
-      "Reemplazar bloques repetidos por un solo For.",
-      "Cerrar siempre con Detener.",
+      "Usar bucles For para repeticion fija.",
+      "Configurar el parametro N en un bucle.",
+      "Optimizar codigo secuencial.",
     ],
     instructions: [
       "Coloca Repetir N veces y configura N=4.",
-      "Agrega Avanzar dentro del For.",
+      "Agrega dentro del For: Avanzar, Girar derecha, Avanzar y Girar izquierda.",
       "Cierra con Detener.",
       "Pulsa Probar para verificar que el robot llega a la meta.",
     ],
-    victory: "El robot avanza 4 celdas con For N=4 + Avanzar, terminando con Detener.",
+    victory: "El robot debe llegar a la meta usando un bucle For configurado en 4 iteraciones.",
     tips: [
-      "El robot empieza en la columna 0, la meta esta en la columna 4.",
-      "For N veces ejecuta su contenido exactamente N veces.",
+      "Haz clic en el numero del bloque For para cambiar el valor de N.",
+      "Los bloques dentro de 'Repetir N veces' se ejecutaran consecutivamente.",
     ],
   },
-
-  // ── Mision 2: Ruta en L con dos For ──────────────────────────────────────
   {
     id: 2,
     title: "Esquina con For",
     difficulty: "Basica",
-    objective:
-      "Usa dos bloques Repetir N veces consecutivos para trazar una ruta en L hasta la meta.",
-    summary:
-      "La ruta baja y luego gira a la derecha. Cada tramo recto se cubre con un For distinto.",
-    scenarioLabel: "Escenario 2 / 5x5",
-    // Robot en (0,0) mirando abajo → baja 3 → gira derecha → avanza 4 → meta (3,4)
+    objective: "Usa un bucle For para avanzar una distancia larga y luego realiza un giro para llegar a la meta.",
+    summary: "Avanza por un pasillo recto usando repeticion y luego gira hacia la meta lateral.",
+    scenarioLabel: "ESCENARIO 2 / 5x5",
     grid: [
-      [2, 1, 0, 0, 0],
-      [0, 0, 1, 0, 0],
-      [0, 0, 1, 0, 0],
-      [1, 0, 0, 0, 3],
+      [2, 0, 0, 0, 0],
       [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [3, 0, 0, 0, 0],
     ],
-    requiredSequence: [
-      "INIT", "FOR_REPEAT", "FORWARD", "TURN_RIGHT", "FOR_REPEAT", "FORWARD", "STOP",
-    ],
+    requiredSequence: ["INIT", "REPEAT", "FORWARD", "TURN_RIGHT", "REPEAT", "FORWARD", "STOP"],
     learningOutcomes: [
-      "Encadenar dos For para cubrir dos tramos distintos.",
-      "Combinar giros con bloques For.",
-      "Planificar distancias antes de configurar N.",
+      "Combinar multiples bucles For en la misma secuencia.",
+      "Calcular iteraciones exactas para girar en esquinas.",
     ],
     instructions: [
-      "El primer For baja el robot 3 filas (N=3) con Avanzar.",
-      "Agrega Girar derecha entre los dos For.",
-      "El segundo For mueve 4 columnas (N=4) con Avanzar.",
-      "Cierra con Detener.",
+      "Avanza 4 celdas usando un bucle For.",
+      "Gira a la derecha y luego avanza otras 4 celdas usando otro bucle For.",
+      "Termina el programa con Detener sobre la meta.",
     ],
-    victory: "Dos For (N=3 y N=4) con un giro intermedio para alcanzar la meta.",
+    victory: "El robot alcanza la esquina inferior izquierda del tablero usando bucles.",
     tips: [
-      "Cuenta las casillas de cada tramo antes de asignar N.",
-      "El giro va entre los dos For, no dentro de ninguno.",
-      "El robot empieza mirando hacia abajo.",
+      "Usa la cantidad exacta de pasos N en cada bucle.",
     ],
   },
-
-  // ── Mision 3: Primera If/Else ─────────────────────────────────────────────
   {
     id: 3,
     title: "Decision en el camino",
     difficulty: "Media",
-    objective:
-      "Usa Si hay obstaculo / Si no hay obstaculo para que el robot elija entre dos acciones segun lo que detecte el sensor frontal.",
-    summary:
-      "El robot arranca con un obstaculo al frente. La rama 'Si hay obstaculo' debe girar para esquivarlo; la rama libre avanza directo.",
-    scenarioLabel: "Escenario 3 / 5x5",
-    // Robot en (2,0) mirando derecha; obstaculo en (2,1); meta en (4,4)
-    // Ruta correcta: If→ hay obstaculo → Girar derecha; else → Avanzar
-    // Luego For N=3 + Avanzar + For N=4 + Avanzar + Detener (rama if ejecuta giro)
+    objective: "Combina condicionales y bucles en una secuencia avanzada.",
+    summary: "Decide la direccion correcta al inicio y luego usa un bucle For para recorrer el tramo final.",
+    scenarioLabel: "ESCENARIO 3 / 6x6",
     grid: [
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [2, 1, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 3],
+      [2, 1, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 3],
+      [0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0],
     ],
-    requiredSequence: [
-      "INIT", "IF_OBS_ELSE", "TURN_RIGHT", "FORWARD", "FOR_REPEAT", "FORWARD", "FOR_REPEAT", "FORWARD", "STOP",
-    ],
+    requiredSequence: ["INIT", "IF_OBS_ELSE", "TURN_RIGHT", "FORWARD", "REPEAT", "FORWARD", "STOP"],
     learningOutcomes: [
-      "Usar la condicion If/Else para tomar decisiones automaticas.",
-      "Distinguir la rama de obstaculo de la rama libre.",
-      "Combinar If/Else con For en una misma secuencia.",
+      "Integrar condicionales y bucles en orden secuencial.",
+      "Planificar rutas dinamicas ante obstaculos fijos.",
     ],
     instructions: [
-      "Agrega Si hay obstaculo / Si no hay obstaculo.",
-      "Rama obstaculo: Girar derecha (para bajar).",
-      "Rama libre: Avanzar (si no hubiera bloqueo).",
-      "Despues del If/Else agrega For N=3 + Avanzar para bajar hasta la fila 4.",
-      "Agrega For N=4 + Avanzar para llegar a la columna 4.",
-      "Cierra con Detener.",
+      "Evalua si hay obstaculo al frente para elegir el desvio correcto.",
+      "Una vez alineado con el corredor de la meta, usa un bucle For para avanzar 4 celdas directamente.",
     ],
-    victory: "El If detecta el obstaculo, gira, luego dos For llevan al robot a la meta.",
+    victory: "El robot esquiva el obstaculo y recorre el pasillo hasta la meta.",
     tips: [
-      "El sensor frontal detecta el obstaculo en (2,1) cuando el robot esta en (2,0).",
-      "Despues del giro el robot mira hacia abajo.",
-      "Planifica cuantas celdas recorre cada For.",
+      "La decision inicial te saca del bloqueo del inicio.",
     ],
   },
-
-  // ── Mision 4: For dentro de rama If/Else ─────────────────────────────────
   {
     id: 4,
     title: "For dentro de condicion",
     difficulty: "Alta",
-    objective:
-      "Combina If/Else con un bloque de movimiento en cada rama para recorrer caminos distintos segun si hay obstaculo o no.",
-    summary:
-      "La bifurcacion inicial separa dos rutas. Despues del If/Else, un For cubre el tramo final comun.",
-    scenarioLabel: "Escenario 4 / 5x5",
-    // Robot en (0,0) mirando derecha; obstaculo en (0,1); meta en (4,4)
-    // Rama obstaculo: Girar derecha (baja) → For N=4 → Avanzar → Girar derecha → For N=4 → Avanzar
-    // Rama libre: Avanzar (pero hay obstaculo así que se ejecuta la de arriba)
+    objective: "Anida un bucle For dentro de una de las ramas de un condicional.",
+    summary: "Si no hay obstaculo avanza con un bucle, si hay obstaculo toma otra ruta.",
+    scenarioLabel: "ESCENARIO 4 / 6x6",
     grid: [
-      [2, 1, 0, 0, 0],
-      [0, 1, 0, 0, 0],
-      [0, 0, 0, 1, 0],
-      [0, 1, 0, 0, 0],
-      [0, 0, 0, 0, 3],
+      [2, 0, 0, 0, 1, 0],
+      [0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 3],
+      [0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0],
     ],
-    requiredSequence: [
-      "INIT",
-      "IF_OBS_ELSE", "TURN_RIGHT", "FORWARD",
-      "FOR_REPEAT", "FORWARD",
-      "TURN_RIGHT",
-      "FOR_REPEAT", "FORWARD",
-      "STOP",
-    ],
+    requiredSequence: ["INIT", "IF_OBS_ELSE", "REPEAT", "FORWARD", "FORWARD", "STOP"],
     learningOutcomes: [
-      "Anidar movimiento dentro de una rama if/else.",
-      "Seguir la ruta correcta segun la deteccion del sensor.",
-      "Combinar condicion y repeticion fija en una sola secuencia.",
+      "Anidar estructuras de repeticion dentro de condicionales.",
+      "Estructurar ramas complejas con multiples bloques.",
     ],
     instructions: [
-      "Agrega If/Else.",
-      "Rama obstaculo: Girar derecha.",
-      "Rama libre: Avanzar (no se ejecutara porque hay obstaculo).",
-      "Agrega For N=4 + Avanzar para bajar 4 filas.",
-      "Agrega Girar derecha para orientarte hacia la meta.",
-      "Agrega For N=4 + Avanzar para avanzar 4 columnas hasta la meta.",
-      "Cierra con Detener.",
+      "Configura una condicion inicial de obstaculo.",
+      "Coloca un bloque Repetir N veces dentro de la rama libre para avanzar rapidamente.",
+      "Cierra la ruta sobre la meta y valida en la consola.",
     ],
-    victory: "If detecta obstaculo, gira; dos For con giro intermedio llevan al robot a la meta.",
+    victory: "El robot ejecuta la repetición anidada en la rama correspondiente para llegar a la meta.",
     tips: [
-      "El robot empieza mirando a la derecha con un muro al frente.",
-      "Despues del primer giro el robot mira hacia abajo.",
-      "Cuenta las casillas de cada tramo antes de configurar N.",
+      "Puedes arrastrar el bloque For y soltarlo directamente dentro de la seccion 'Si no hay obstaculo'.",
     ],
   },
-
-  // ── Mision 5: Desafio maestro — If/Else + dos For ────────────────────────
   {
     id: 5,
     title: "Desafio maestro",
     difficulty: "Final",
-    objective:
-      "Resuelve el laberinto final combinando If/Else y dos bloques Repetir N veces en una sola secuencia coherente.",
-    summary:
-      "El laberinto mas complejo del nivel exige una decision inicial y dos tramos de repeticion fija para alcanzar la meta.",
-    scenarioLabel: "Escenario 5 / 5x5",
-    // Robot en (0,0) mirando derecha; obstaculo en (0,1) y (0,2); meta en (4,4)
+    objective: "Resuelve una ruta de alta complejidad anidando condicionales dentro de bucles y usando For.",
+    summary: "Zigzag complejo con obstaculos fijos que requiere optimizacion maxima de bloques.",
+    scenarioLabel: "ESCENARIO 5 / Desafio Maestro",
     grid: [
-      [2, 1, 1, 0, 0],
-      [0, 0, 0, 1, 0],
-      [1, 0, 0, 0, 0],
-      [0, 1, 1, 1, 0],
-      [0, 0, 0, 0, 3],
+      [2, 0, 1, 0, 0, 0],
+      [0, 0, 1, 0, 0, 0],
+      [0, 0, 0, 0, 1, 0],
+      [0, 1, 1, 0, 1, 3],
+      [0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0],
     ],
-    requiredSequence: [
-      "INIT",
-      "IF_OBS_ELSE", "TURN_RIGHT", "FORWARD",
-      "FOR_REPEAT", "FORWARD",
-      "TURN_RIGHT",
-      "FOR_REPEAT", "FORWARD",
-      "STOP",
-    ],
+    requiredSequence: ["INIT", "REPEAT", "IF_OBS_ELSE", "TURN_RIGHT", "FORWARD", "STOP"],
     learningOutcomes: [
-      "Integrar If/Else y dos For en una sola secuencia.",
-      "Resolver un laberinto complejo con decisiones y repeticiones.",
-      "Planificar el orden de las estructuras antes de programar.",
+      "Resolver desvios continuos de forma automatica.",
+      "Combinar multiples estructuras anidadas en el nivel final.",
     ],
     instructions: [
-      "Empieza con If/Else: rama obstaculo → Girar derecha; rama libre → Avanzar.",
-      "Agrega For N=4 + Avanzar para bajar hasta la fila 4.",
-      "Agrega Girar derecha para orientarte hacia la columna 4.",
-      "Agrega For N=4 + Avanzar para llegar a la meta.",
-      "Cierra con Detener.",
+      "Usa una combinacion de Repetir N veces y condicionales para avanzar decidiendo en cada esquina.",
+      "Llega a la meta en la esquina derecha media de forma automatica y envia el programa.",
     ],
-    victory: "If + dos For con giro intermedio llevan al robot a la meta sin colisiones.",
+    victory: "El robot resuelve el laberinto complejo de forma exitosa.",
     tips: [
-      "Planifica la ruta en papel antes de programar.",
-      "El orden de las estructuras es tan importante como su contenido.",
-      "El primer For baja; el segundo avanza hacia la meta.",
-      "Usa el simulador para validar cada estructura por separado.",
+      "Analiza el recorrido del robot y cuenta cuantas repeticiones totales requiere.",
     ],
   },
 ];
 
-// ── Contenido de mision del Nivel 2 ──────────────────────────────────────────
 export const LEVEL_MISSIONS: Record<"3", MissionContent> = {
   "3": {
     level: "Nivel 2",
     levelSlug: "Avanzado",
     title: "Bucles y decisiones",
-    badge: "For + If/Else",
-    icon: <Cpu size={24} weight="duotone" />,
-    accent: "indigo",
+    badge: "Aninados",
+    icon: <Repeat size={24} weight="duotone" />,
+    accent: "violet",
     objective:
-      "Domina las estructuras de control: usa Repetir N veces para recorrer tramos fijos sin repetir bloques, y Si hay obstaculo / Si no hay obstaculo para que el robot tome decisiones automaticas.",
+      "Aprende a combinar y anidar bucles y decisiones complejas. El robot reacciona a distancias mas largas y planifica rutas inteligentes.",
     learningOutcomes: [
-      "Usar Repetir N veces para recorrer tramos fijos sin repetir bloques manualmente.",
-      "Usar Si hay obstaculo / Si no para elegir entre dos acciones automaticamente.",
-      "Combinar If/Else y For en una secuencia compleja.",
+      "Anidar condicionales dentro de bucles Mientras no llegue.",
+      "Usar lecturas de distancia de multiples sensores de forma simultanea.",
+      "Resolver laberintos y zigzags de forma totalmente automatizada.",
     ],
     instructions: [
-      "La primera mision es un tutorial guiado sobre el bloque For.",
-      "A partir de la mision 3 se introduce el bloque Si hay obstaculo / Si no hay obstaculo.",
-      "En las ultimas misiones debes combinar ambas estructuras.",
-      "Configura N en el bloque For segun la distancia real del tramo.",
-      "Presiona Probar para simular antes de enviar al robot fisico.",
+      "Inserta bloques condicionales dentro del cuerpo de un bucle para evaluar el entorno constantemente.",
+      "Usa la simulacion para ver el valor exacto de distancia en centimetros de los sensores.",
+      "Si la simulacion completa el laberinto, desbloquearas la carga de programa al robot fisico.",
     ],
     victory:
-      "Cada mision tiene su condicion especifica. Lee el objetivo y las instrucciones antes de programar.",
+      "El robot debe encontrar y llegar a la meta en escenarios avanzados mediante logica repetitiva autogestionada.",
     blocks: [
       "Iniciar mision",
       "Avanzar",
       "Retroceder",
       "Girar izquierda",
       "Girar derecha",
-      "Esperar",
-      "Detener",
       "Si hay obstaculo / Si no hay obstaculo",
       "Repetir N veces",
+      "Detener",
     ],
     tips: [
-      "For repite exactamente N veces, sin importar los sensores.",
-      "If/Else toma una decision segun el sensor frontal en ese instante.",
-      "Puedes encadenar varios For para cubrir tramos distintos.",
-      "El robot mira en la direccion de la flecha al inicio de cada mision.",
-      "Planifica la ruta en papel antes de programar las misiones finales.",
+      "Los condicionales anidados evaluan las condiciones en cada iteracion del bucle.",
+      "Usa el panel de sensores para verificar que distancia detecta el robot en tiempo real.",
     ],
   },
 };
 
-// ── Configuracion del editor del Nivel 2 ─────────────────────────────────────
 export const LEVEL_EDITORS: Record<"3", EditorLevelContent> = {
   "3": {
     title: "Avanzado",
     level: "Nivel 2",
     levelSlug: "Avanzado",
-    accent: "indigo",
+    accent: "violet",
     grid: LEVEL_3_STAGES[0].grid,
     start: [0, 0],
     startDir: 0,
     palette: [...BASIC_PALETTE, ...ADVANCED_PALETTE],
     helperText:
-      "Usa Repetir N veces para tramos fijos y Si hay obstaculo para tomar decisiones automaticas.",
+      "Usa Repetir N veces para tramos fijos y Si hay obstaculo para tomar decisiones automáticas.",
   },
 };

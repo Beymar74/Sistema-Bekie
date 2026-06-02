@@ -1,5 +1,3 @@
-"use client";
-
 import type { ReactNode } from "react";
 import {
   ArrowClockwise,
@@ -25,8 +23,7 @@ export type BlockType =
   | "IF_OBS"
   | "IF_OBS_ELSE"
   | "WHILE_GOAL"
-  | "WHILE_OBS"
-  | "FOR_REPEAT";
+  | "REPEAT";
 
 export interface PaletteBlock {
   type: BlockType;
@@ -41,7 +38,7 @@ export interface MissionContent {
   title: string;
   badge: string;
   icon: ReactNode;
-  accent: "cyan" | "violet" | "indigo";
+  accent: "cyan" | "violet";
   objective: string;
   instructions: string[];
   victory: string;
@@ -54,7 +51,7 @@ export interface EditorLevelContent {
   title: string;
   level: string;
   levelSlug: string;
-  accent: "cyan" | "violet" | "indigo";
+  accent: "cyan" | "violet";
   grid: number[][];
   start: [number, number];
   startDir: Dir;
@@ -121,70 +118,5 @@ export const BASIC_PALETTE: PaletteBlock[] = [
     icon: <StopCircle size={14} weight="fill" />,
   },
 ];
-
-const GRID_BASIC = [
-  [2, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 3],
-];
-
-export const LEVEL_MISSIONS: Record<"1", MissionContent> = {
-  "1": {
-    level: "Nivel 0",
-    levelSlug: "Basico",
-    title: "Movimiento basico",
-    badge: "Secuencial",
-    icon: <Code size={24} weight="duotone" />,
-    accent: "cyan",
-    objective:
-      "Lleva el robot desde el punto A hasta el punto B usando bloques de movimiento y orientacion.",
-    learningOutcomes: [
-      "Reconocer los bloques básicos de movimiento.",
-      "Ordenar una secuencia simple desde Iniciar misión hasta la meta.",
-      "Probar antes de enviar el programa al robot.",
-    ],
-    instructions: [
-      "Selecciona los bloques del panel izquierdo.",
-      "Armalos en orden en el area central de programacion.",
-      "Presiona Probar simulacion para verificar tu logica.",
-      "Si la simulacion es exitosa, envia el programa al robot fisico.",
-    ],
-    victory:
-      "El robot debe llegar a la meta sin salir del tablero ni chocar con ningun obstaculo.",
-    blocks: [
-      "Iniciar mision",
-      "Avanzar",
-      "Retroceder",
-      "Girar izquierda",
-      "Girar derecha",
-      "Esperar",
-      "Detener",
-    ],
-    tips: [
-      "El robot empieza mirando hacia la derecha.",
-      "Cada Avanzar mueve el robot una celda.",
-      "Girar no desplaza al robot, solo cambia su direccion.",
-    ],
-  },
-};
-
-export const LEVEL_EDITORS: Record<"1", EditorLevelContent> = {
-  "1": {
-    title: "Basico",
-    level: "Nivel 0",
-    levelSlug: "Basico",
-    accent: "cyan",
-    grid: GRID_BASIC,
-    start: [0, 0],
-    startDir: 0,
-    palette: BASIC_PALETTE,
-    helperText:
-      "Ruta secuencial: usa los bloques de movimiento para llevar al robot hasta la meta.",
-  },
-};
 
 export const LEVEL_ORDER: LevelKey[] = ["1", "2", "3"];

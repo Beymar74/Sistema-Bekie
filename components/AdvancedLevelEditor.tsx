@@ -1,55 +1,74 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { motion } from "motion/react";
 import AppNav from "@/components/AppNav";
 import {
   ArrowLeft,
   CheckCircle,
+  Code,
   Cpu,
-  Play,
   Plus,
-  Repeat,
-  StopCircle,
   Trash,
   Warning,
   X,
 } from "@phosphor-icons/react";
-import Link from "next/link";
-import { motion } from "motion/react";
+import { LEVEL_3_STAGES } from "@/lib/nivel-2";
 import {
   type BlockType,
   type Dir,
   type EditorLevelContent,
+  type MissionStage,
   type PaletteBlock,
 } from "@/lib/levels";
-import { LEVEL_3_STAGES, type MissionStage } from "@/lib/nivel-2";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-type SimStatus = "idle" | "running" | "success" | "collision" | "oob" | "incomplete";
-type TutorialTarget = "palette" | "program" | "run";
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+
+type CompilerStatus = "idle" | "success" | "error";
+type TutorialTarget = "palette" | "program" | "compile" | "load";
 
 interface Block extends PaletteBlock {
   id: string;
   steps?: number;
-  repeatCount?: number;
 }
 
-interface SensorState {
-  front: number | null;
-  left: number | null;
-  right: number | null;
-  obstacleAhead: boolean;
-}
+type ProgramViewItem =
+  | {
+      kind: "block";
+      block: Block;
+      index: number;
+    }
+  | {
+      kind: "conditional";
+      block: Block;
+      index: number;
+      ifBranch?: Block;
+      ifIndex?: number;
+      elseBranch?: Block;
+      elseIndex?: number;
+      ifLoopBody?: ProgramViewItem[];
+      elseLoopBody?: ProgramViewItem[];
+    }
+  | {
+      kind: "loop";
+      block: Block;
+      index: number;
+      body: ProgramViewItem[];
+      bodyStartIndex: number;
+    };
 
-interface SimState {
-  pos: [number, number];
-  dir: Dir;
-  visited: Set<string>;
-  status: SimStatus;
+interface CompilerIssue {
   message: string;
-  sensors: SensorState;
-  stepLabel: string;
+  index?: number;
+}
+
+interface CompilerResult {
+  status: CompilerStatus;
+  message: string;
+  issues: CompilerIssue[];
+  highlightIndexes: number[];
 }
 
 interface TutorialStep {
@@ -57,542 +76,449 @@ interface TutorialStep {
   text: string;
   target: TutorialTarget;
   lockText: string;
-  blocksToPress: BlockType[];
-  check: (program: Block[], simStatus: SimStatus) => boolean;
+  blocksToPress?: BlockType[];
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-const DIR_DELTA: [number, number][] = [[0, 1],[1, 0],[0, -1],[-1, 0]];
-const DIR_ARROW = ["→", "↓", "←", "↑"];
-const DIR_LABEL = ["Derecha", "Abajo", "Izquierda", "Arriba"];
-const MAX_SIM_TICKS = 400;
-const SENSOR_STEP_CM = 20;
-const TICK_MS = 380;
-const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+const BLOCK_LABELS: Record<BlockType, string> = {
+  INIT: "Iniciar mision",
+  FORWARD: "Avanzar",
+  BACKWARD: "Retroceder",
+  TURN_RIGHT: "Girar derecha",
+  TURN_LEFT: "Girar izquierda",
+  WAIT: "Esperar",
+  STOP: "Detener",
+  IF_OBS: "Si hay obstaculo",
+  IF_OBS_ELSE: "Si hay obstaculo / Si no hay obstaculo",
+  WHILE_GOAL: "Mientras no llegue",
+  REPEAT: "Repetir N veces",
+};
 
-let uid = 0;
-const genId = () => `b_${++uid}_${Date.now()}`;
-const formatDist = (v: number | null) => (v === null ? "--" : `${v} cm`);
+const EMPTY_BLOCKS: BlockType[] = [];
 
-// ── Tutorial steps ────────────────────────────────────────────────────────────
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
-    title: "Paso 1",
-    text: "Tu programa ya empieza con Iniciar mision. Ahora pulsa Repetir N veces desde el panel izquierdo. Este bloque repetira el bloque siguiente exactamente N veces, sin que tengas que ponerlo varias veces.",
+    title: "PASO 1 / ASISTENTE BEKIE",
+    text: "Tu programa ya empieza con Iniciar mision. Ahora pulsa Repetir N veces desde el panel izquierdo. Este bloque repetirá las instrucciones de movimiento en cada iteración.",
     target: "palette",
-    lockText: "Agrega el bloque Repetir N veces para desbloquear el siguiente paso.",
-    blocksToPress: ["FOR_REPEAT"],
-    check: (p) => p.some((b) => b.type === "FOR_REPEAT"),
+    lockText: "Agrega el bloque Repetir N veces para continuar.",
+    blocksToPress: ["REPEAT"],
   },
   {
-    title: "Paso 2",
-    text: "Ahora pulsa Avanzar para que quede dentro del bloque For. Luego agrega Detener al final para cerrar el programa.",
+    title: "PASO 2 / ASISTENTE BEKIE",
+    text: "Ahora pulsa Avanzar para colocarlo dentro del bucle como primer paso de la escalera.",
     target: "palette",
-    lockText: "Agrega Avanzar dentro del For y Detener al final para continuar.",
-    blocksToPress: ["FORWARD", "STOP"],
-    check: (p) => {
-      const forIdx = p.findIndex((b) => b.type === "FOR_REPEAT");
-      return (
-        forIdx !== -1 &&
-        p[forIdx + 1]?.type === "FORWARD" &&
-        p.some((b) => b.type === "STOP")
-      );
-    },
+    lockText: "Agrega Avanzar dentro del bucle para continuar.",
+    blocksToPress: ["FORWARD"],
   },
   {
-    title: "Paso 3",
-    text: "Ahora mira el bloque For en tu programa. Verás que tiene un campo N = 3. Haz clic en ese número y cámbialo a 4. Así el robot avanzará 4 celdas en lugar de 3.",
+    title: "PASO 3 / ASISTENTE BEKIE",
+    text: "Ahora pulsa Girar derecha para añadir el giro dentro del bucle.",
+    target: "palette",
+    lockText: "Agrega Girar derecha dentro del bucle para continuar.",
+    blocksToPress: ["TURN_RIGHT"],
+  },
+  {
+    title: "PASO 4 / ASISTENTE BEKIE",
+    text: "Agrega otro bloque Avanzar dentro del bucle para avanzar en el siguiente eje.",
+    target: "palette",
+    lockText: "Agrega Avanzar dentro del bucle para continuar.",
+    blocksToPress: ["FORWARD"],
+  },
+  {
+    title: "PASO 5 / ASISTENTE BEKIE",
+    text: "Agrega Girar izquierda dentro del bucle para orientar el robot hacia el siguiente escalón.",
+    target: "palette",
+    lockText: "Agrega Girar izquierda dentro del bucle para continuar.",
+    blocksToPress: ["TURN_LEFT"],
+  },
+  {
+    title: "PASO 6 / ASISTENTE BEKIE",
+    text: "Ahora agrega Detener al final del programa (fuera del bucle) para finalizar sobre la meta.",
+    target: "palette",
+    lockText: "Agrega Detener al final para continuar.",
+    blocksToPress: ["STOP"],
+  },
+  {
+    title: "PASO 7 / ASISTENTE BEKIE",
+    text: "Haz clic en el número N = 3 del bucle y cámbialo a 4. Así repetirá el patrón de escalones 4 veces hasta llegar a la posición (5,5).",
     target: "program",
-    lockText: "Cambia el valor de N a 4 en el bloque Repetir N veces para continuar.",
-    blocksToPress: [],
-    check: (p) => {
-      const forBlock = p.find((b) => b.type === "FOR_REPEAT");
-      return forBlock !== undefined && (forBlock.repeatCount ?? 3) === 4;
-    },
+    lockText: "Cambia el valor de N a 4 en el bloque Repetir N veces.",
   },
   {
-    title: "Paso 4",
-    text: "Perfecto. Ahora pulsa Probar para simular. El robot deberia avanzar 4 celdas y llegar a la meta. Si todo va bien, el tutorial terminara automaticamente.",
-    target: "run",
-    lockText: "Presiona Probar para simular el programa y verificar que llega a la meta.",
-    blocksToPress: [],
-    check: (_p, simStatus) => simStatus === "success",
+    title: "PASO 8 / ASISTENTE BEKIE",
+    text: "¡Perfecto! Ahora pulsa Compilar para simular el recorrido. El robot subirá la escalera de 5x5 hasta la meta.",
+    target: "compile",
+    lockText: "Presiona Compilar para finalizar el tutorial.",
   },
 ];
 
-// ── Props ─────────────────────────────────────────────────────────────────────
-interface Props {
+interface AdvancedLevelEditorProps {
   config: EditorLevelContent;
   stage: MissionStage;
   missionIndex: number;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-export default function AdvancedLevelEditor({ config, stage, missionIndex }: Props) {
+export default function AdvancedLevelEditor({
+  config,
+  stage,
+  missionIndex,
+}: AdvancedLevelEditorProps) {
   const router = useRouter();
-  const grid = stage.grid;
-  const gridSize = grid.length;
-  const isTutorial = missionIndex === 1;
-
-  // ── Scenario intro ────────────────────────────────────────────────────────
-  const [scenarioIntroVisible, setScenarioIntroVisible] = useState(true);
+  const showTutorial = missionIndex === 1;
+  const gridSize = stage.grid.length;
+  const [program, setProgram] = useState<Block[]>(() => [{ ...config.palette[0], id: "b_1" }]);
+  const [compilerResult, setCompilerResult] = useState<CompilerResult>({
+    status: "idle",
+    message: "Agrega bloques al programa para habilitar el compilador.",
+    issues: [],
+    highlightIndexes: [],
+  });
   const [tutorialVisible, setTutorialVisible] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
-
-  // ── Focus rect refs ────────────────────────────────────────────────────────
-  const [focusRect, setFocusRect] = useState<{
-    top: number; left: number; width: number; height: number;
+  const [scenarioIntroVisible, setScenarioIntroVisible] = useState(true);
+  const [targetRect, setTargetRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number;
   } | null>(null);
+
   const paletteRef = useRef<HTMLDivElement | null>(null);
   const programRef = useRef<HTMLDivElement | null>(null);
-  const runRef = useRef<HTMLButtonElement | null>(null);
+  const compileRef = useRef<HTMLButtonElement | null>(null);
+  const loadRef = useRef<HTMLButtonElement | null>(null);
 
-  const dismissScenarioIntro = () => {
-    setScenarioIntroVisible(false);
-    if (isTutorial) setTutorialVisible(true);
-  };
-
-  // ── Sim state ─────────────────────────────────────────────────────────────
-  const findStart = useCallback((): [number, number] => {
-    for (let r = 0; r < grid.length; r++) {
-      const c = grid[r].indexOf(2);
-      if (c !== -1) return [r, c];
+  const updateTargetRect = useCallback(() => {
+    if (!showTutorial || !tutorialVisible) {
+      setTargetRect(null);
+      return;
     }
-    return [0, 0];
-  }, [grid]);
 
-  const makeInitialSim = useCallback((): SimState => {
-    const start = findStart();
-    return {
-      pos: start,
-      dir: config.startDir,
-      visited: new Set([`${start[0]}-${start[1]}`]),
-      status: "idle",
-      message: "",
-      sensors: { front: null, left: null, right: null, obstacleAhead: false },
-      stepLabel: "",
-    };
-  }, [config.startDir, findStart]);
-
-  const makeInitialProgram = useCallback(
-    (): Block[] => [{ ...config.palette[0], id: genId() }],
-    [config.palette]
-  );
-
-  const [program, setProgram] = useState<Block[]>(() => makeInitialProgram());
-  const [sim, setSim] = useState<SimState>(() => makeInitialSim());
-  const [canSend, setCanSend] = useState(false);
-  const [attempts, setAttempts] = useState(0);
-  const startTimeRef = useRef<number>(Date.now());
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
-
-  // ── Save progress automatically when simulation succeeds ──────────────────
-  useEffect(() => {
-    if (!canSend) return;
-    const next = Math.min(LEVEL_3_STAGES.length, missionIndex + 1);
-    const stored =
-      typeof window !== "undefined"
-        ? Number(window.localStorage.getItem("bekie-level-3-progress") ?? "1")
-        : 1;
-    const safeStored = Number.isNaN(stored) ? 1 : stored;
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(
-        "bekie-level-3-progress",
-        String(Math.max(safeStored, next))
-      );
+    let selector = "";
+    if (tutorialStep === 0) {
+      selector = "#btn-palette-repeat";
+    } else if (tutorialStep === 1) {
+      selector = "#btn-palette-forward";
+    } else if (tutorialStep === 2) {
+      selector = "#btn-palette-turn_right";
+    } else if (tutorialStep === 3) {
+      selector = "#btn-palette-forward";
+    } else if (tutorialStep === 4) {
+      selector = "#btn-palette-turn_left";
+    } else if (tutorialStep === 5) {
+      selector = "#btn-palette-stop";
+    } else if (tutorialStep === 6) {
+      selector = "#input-loop-n";
+    } else if (tutorialStep === 7) {
+      selector = "#btn-compile";
     }
-  }, [canSend, missionIndex]);
 
-  // ── Tutorial: auto-advance when condition met ──────────────────────────────
-  const currentTutStep = isTutorial && tutorialVisible && tutorialStep < TUTORIAL_STEPS.length
-    ? TUTORIAL_STEPS[tutorialStep]
-    : null;
-
-  const canAdvanceTutorial = useMemo(() => {
-    if (!currentTutStep) return false;
-    return currentTutStep.check(program, sim.status);
-  }, [currentTutStep, program, sim.status]);
-
-  useEffect(() => {
-    if (!isTutorial || !tutorialVisible || !currentTutStep) return;
-    if (!canAdvanceTutorial || tutorialStep >= TUTORIAL_STEPS.length - 1) return;
-    const t = setTimeout(() => setTutorialStep((s) => s + 1), 400);
-    return () => clearTimeout(t);
-  }, [canAdvanceTutorial, currentTutStep, isTutorial, tutorialStep, tutorialVisible]);
-
-  // ── Focus rect ─────────────────────────────────────────────────────────────
-  const updateFocusRect = useCallback(() => {
-    if (!currentTutStep || typeof window === "undefined") return;
-    const refs: Record<TutorialTarget, React.RefObject<HTMLElement | null>> = {
-      palette: paletteRef as React.RefObject<HTMLElement | null>,
-      program: programRef as React.RefObject<HTMLElement | null>,
-      run: runRef as React.RefObject<HTMLElement | null>,
-    };
-    const element = refs[currentTutStep.target].current;
-    if (!element) { setFocusRect(null); return; }
-    const rect = element.getBoundingClientRect();
-    const padding = currentTutStep.target === "run" ? 10 : 12;
-    setFocusRect({
-      top: Math.max(12, rect.top - padding),
-      left: Math.max(12, rect.left - padding),
-      width: Math.min(window.innerWidth - 24, rect.width + padding * 2),
-      height: Math.min(window.innerHeight - 24, rect.height + padding * 2),
-    });
-  }, [currentTutStep]);
+    if (selector) {
+      const el = document.querySelector(selector);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setTargetRect({
+          top: r.top,
+          left: r.left,
+          width: r.width,
+          height: r.height,
+        });
+        return;
+      }
+    }
+    setTargetRect(null);
+  }, [showTutorial, tutorialVisible, tutorialStep, program]);
 
   useEffect(() => {
-    if (!currentTutStep) return;
-    const frame = window.requestAnimationFrame(updateFocusRect);
-    const h = () => updateFocusRect();
-    window.addEventListener("resize", h);
-    window.addEventListener("scroll", h, true);
+    updateTargetRect();
+    const t = setTimeout(updateTargetRect, 120);
+    
+    let interval: number | undefined;
+    if (showTutorial && tutorialVisible) {
+      interval = window.setInterval(updateTargetRect, 250);
+    }
+
+    window.addEventListener("resize", updateTargetRect);
+    window.addEventListener("scroll", updateTargetRect, true);
     return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", h);
-      window.removeEventListener("scroll", h, true);
+      clearTimeout(t);
+      if (interval) clearInterval(interval);
+      window.removeEventListener("resize", updateTargetRect);
+      window.removeEventListener("scroll", updateTargetRect, true);
     };
-  }, [currentTutStep, updateFocusRect]);
+  }, [updateTargetRect, tutorialStep, program, tutorialVisible, showTutorial]);
 
-  // ── Tutorial highlight classes ─────────────────────────────────────────────
-  const tutHighlightBlocks = useMemo(
-    () => new Set(currentTutStep?.blocksToPress ?? []),
-    [currentTutStep]
-  );
-
-  const getPaletteClass = useCallback((def: PaletteBlock) => {
-    const base = `block-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-all ${def.colorClass} hover:brightness-125`;
-    if (!tutorialVisible || !currentTutStep || currentTutStep.blocksToPress.length === 0) return base;
-    if (tutHighlightBlocks.has(def.type)) return `${base} ring-2 ring-indigo-400 shadow-[0_0_0_2px_rgba(99,102,241,0.32)] scale-[1.03] brightness-125 saturate-125`;
-    return `${base} opacity-15 saturate-0 brightness-60`;
-  }, [currentTutStep, tutHighlightBlocks, tutorialVisible]);
-
-  // ── Sensor helpers ─────────────────────────────────────────────────────────
-  const getCell = useCallback((pos: [number, number]) => grid[pos[0]]?.[pos[1]] ?? null, [grid]);
-
-  const measureDist = useCallback((pos: [number, number], dir: Dir): number => {
-    const [dr, dc] = DIR_DELTA[dir];
-    let r = pos[0], c = pos[1], cells = 0;
-    while (true) {
-      r += dr; c += dc; cells += 1;
-      if (r < 0 || r >= grid.length || c < 0 || c >= (grid[r]?.length ?? 0)) return cells * SENSOR_STEP_CM;
-      if (grid[r][c] === 1) return cells * SENSOR_STEP_CM;
-    }
-  }, [grid]);
-
-  const readSensors = useCallback((pos: [number, number], dir: Dir): SensorState => {
-    const front = measureDist(pos, dir);
-    return { front, left: measureDist(pos, ((dir + 3) % 4) as Dir), right: measureDist(pos, ((dir + 1) % 4) as Dir), obstacleAhead: front <= SENSOR_STEP_CM };
-  }, [measureDist]);
-
-  // ── Program manipulation ───────────────────────────────────────────────────
-  const resetSim = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setSim(makeInitialSim());
-    setCanSend(false);
-  }, [makeInitialSim]);
+  const normalizeStepCount = useCallback((value: number) => {
+    if (!Number.isFinite(value)) return 1;
+    return Math.max(1, Math.min(9, Math.floor(value)));
+  }, []);
 
   const addBlock = (def: PaletteBlock) => {
-    if (program.length >= 30) return;
-    setProgram((cur) => [...cur, {
-      ...def, id: genId(),
-      ...(def.type === "FORWARD" || def.type === "BACKWARD" ? { steps: 1 } : {}),
-      ...(def.type === "FOR_REPEAT" ? { repeatCount: 3 } : {}),
-    }]);
-    resetSim();
+    if (program.length >= 25) return;
+    setProgram((current) => [
+      ...current,
+      {
+        ...def,
+        id: `b_${current.length + 1}_${Date.now()}`,
+        ...(def.type === "REPEAT" ? { steps: 3 } : def.type === "FORWARD" ? { steps: 1 } : {}),
+      },
+    ]);
+    setCompilerResult({
+      status: "idle",
+      message: "La secuencia cambio. Vuelve a compilar para validar la nueva version.",
+      issues: [],
+      highlightIndexes: [],
+    });
   };
 
   const removeBlock = (id: string) => {
-    setProgram((cur) => {
-      const idx = cur.findIndex((b) => b.id === id);
-      if (idx <= 0) return cur;
-      const block = cur[idx];
-      if (block.type === "FOR_REPEAT" && cur[idx + 1] && cur[idx + 1].type !== "STOP") {
-        return cur.filter((_, i) => i !== idx && i !== idx + 1);
-      }
-      return cur.filter((b, i) => i === 0 || b.id !== id);
+    setProgram((current) => {
+      const index = current.findIndex((block) => block.id === id);
+      if (index <= 0) return current;
+
+      const block = current[index];
+      const removeCount =
+        block.type === "IF_OBS_ELSE"
+          ? current[index + 1]?.type === "REPEAT" || current[index + 2]?.type === "REPEAT"
+            ? current.length - index
+            : 3
+          : block.type === "REPEAT"
+          ? current.length - index
+          : 1;
+      return current.filter((_, currentIndex) => currentIndex < index || currentIndex >= index + removeCount);
     });
-    resetSim();
-  };
-
-  const updateRepeatCount = (id: string, value: number) => {
-    setProgram((cur) => cur.map((b) => b.id === id ? { ...b, repeatCount: Math.max(1, Math.min(20, value)) } : b));
-  };
-
-  const updateSteps = (id: string, value: number) => {
-    setProgram((cur) => cur.map((b) => b.id === id ? { ...b, steps: Math.max(1, Math.min(9, value)) } : b));
+    setCompilerResult({
+      status: "idle",
+      message: "La secuencia cambio. Vuelve a compilar para validar la nueva version.",
+      issues: [],
+      highlightIndexes: [],
+    });
   };
 
   const clearProgram = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setProgram(makeInitialProgram());
-    setSim(makeInitialSim());
-    setCanSend(false);
-    if (isTutorial) setTutorialStep(0);
+    setProgram([{ ...config.palette[0], id: "b_1" }]);
+    setCompilerResult({
+      status: "idle",
+      message: "Secuencia reiniciada. Agrega bloques para volver a compilar.",
+      issues: [],
+      highlightIndexes: [],
+    });
   };
 
-  // ── Flat op builder ────────────────────────────────────────────────────────
-  type FlatOp =
-    | { type: "FORWARD"; steps: number }
-    | { type: "BACKWARD"; steps: number }
-    | { type: "TURN_RIGHT" }
-    | { type: "TURN_LEFT" }
-    | { type: "WAIT" }
-    | { type: "STOP" }
-    | { type: "IF_OBS_ELSE"; ifOpIdx: number; elseOpIdx: number; afterIdx: number };
+  const currentTutorialStep = showTutorial && tutorialVisible ? TUTORIAL_STEPS[tutorialStep] : null;
+  const tutorialBlocksToPress = currentTutorialStep?.blocksToPress ?? EMPTY_BLOCKS;
+  const tutorialHighlightBlocks = useMemo(
+    () => new Set(tutorialBlocksToPress),
+    [tutorialBlocksToPress]
+  );
 
-  const buildFlatOps = useCallback((blocks: Block[]): FlatOp[] => {
-    const ops: FlatOp[] = [];
-    const src = blocks.filter((b) => b.type !== "INIT");
-    let i = 0;
+  const canAdvanceTutorial = useMemo(() => {
+    if (!currentTutorialStep) return false;
 
-    while (i < src.length) {
-      const b = src[i];
+    const types = program.map((b) => b.type);
 
-      // ── FOR_REPEAT: inline-expand N copies of the next block ──
-      if (b.type === "FOR_REPEAT") {
-        const n = b.repeatCount ?? 3;
-        const next = src[i + 1];
-        if (next && next.type !== "STOP") {
-          for (let r = 0; r < n; r++) {
-            if (next.type === "FORWARD")      ops.push({ type: "FORWARD",    steps: next.steps ?? 1 });
-            else if (next.type === "BACKWARD") ops.push({ type: "BACKWARD",   steps: next.steps ?? 1 });
-            else if (next.type === "TURN_RIGHT") ops.push({ type: "TURN_RIGHT" });
-            else if (next.type === "TURN_LEFT")  ops.push({ type: "TURN_LEFT" });
-            else if (next.type === "WAIT")        ops.push({ type: "WAIT" });
-          }
-          i += 2;
-        } else {
-          i += 1;
+    const isSubsequence = (arr: string[], sub: string[]) => {
+      let subIdx = 0;
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i] === sub[subIdx]) {
+          subIdx++;
+          if (subIdx === sub.length) return true;
         }
-        continue;
       }
+      return subIdx === sub.length;
+    };
 
-      // ── IF_OBS_ELSE: emit a single op that carries indices to both branches ──
-      if (b.type === "IF_OBS_ELSE") {
-        const ifBlockSrc  = src[i + 1];
-        const elseBlockSrc = src[i + 2];
-
-        // We'll place: [IF_OBS_ELSE header][if-branch op][else-branch op]
-        const headerIdx  = ops.length;
-        const ifOpIdx    = headerIdx + 1;
-        const elseOpIdx  = headerIdx + 2;
-        const afterIdx   = headerIdx + 3;   // execution continues here after the branch
-
-        ops.push({ type: "IF_OBS_ELSE", ifOpIdx, elseOpIdx, afterIdx });
-
-        // Push IF branch op (slot always present — WAIT if missing/structural)
-        const pushBranchOp = (bl: Block | undefined) => {
-          if (!bl || bl.type === "IF_OBS_ELSE" || bl.type === "FOR_REPEAT" || bl.type === "STOP") {
-            ops.push({ type: "WAIT" });
-          } else if (bl.type === "FORWARD")    ops.push({ type: "FORWARD",  steps: bl.steps ?? 1 });
-          else if (bl.type === "BACKWARD")      ops.push({ type: "BACKWARD", steps: bl.steps ?? 1 });
-          else if (bl.type === "TURN_RIGHT")    ops.push({ type: "TURN_RIGHT" });
-          else if (bl.type === "TURN_LEFT")     ops.push({ type: "TURN_LEFT" });
-          else                                   ops.push({ type: "WAIT" });
-        };
-
-        pushBranchOp(ifBlockSrc);   // ifOpIdx
-        pushBranchOp(elseBlockSrc); // elseOpIdx
-
-        // Advance past IF header + two branch source blocks
-        const ifIsStructural   = !ifBlockSrc  || ["IF_OBS_ELSE","FOR_REPEAT","STOP"].includes(ifBlockSrc.type);
-        const elseIsStructural = !elseBlockSrc || ["IF_OBS_ELSE","FOR_REPEAT","STOP"].includes(elseBlockSrc.type);
-        i += 1 + (ifIsStructural ? 0 : 1) + (elseIsStructural ? 0 : 1);
-        continue;
+    switch (tutorialStep) {
+      case 0:
+        return isSubsequence(types, ["INIT", "REPEAT"]);
+      case 1:
+        return isSubsequence(types, ["INIT", "REPEAT", "FORWARD"]);
+      case 2:
+        return isSubsequence(types, ["INIT", "REPEAT", "FORWARD", "TURN_RIGHT"]);
+      case 3:
+        return isSubsequence(types, ["INIT", "REPEAT", "FORWARD", "TURN_RIGHT", "FORWARD"]);
+      case 4:
+        return isSubsequence(types, ["INIT", "REPEAT", "FORWARD", "TURN_RIGHT", "FORWARD", "TURN_LEFT"]);
+      case 5:
+        return isSubsequence(types, ["INIT", "REPEAT", "FORWARD", "TURN_RIGHT", "FORWARD", "TURN_LEFT", "STOP"]);
+      case 6: {
+        const hasSeq = isSubsequence(types, ["INIT", "REPEAT", "FORWARD", "TURN_RIGHT", "FORWARD", "TURN_LEFT", "STOP"]);
+        const repeatBlock = program.find((b) => b.type === "REPEAT");
+        return hasSeq && repeatBlock?.steps === 4;
       }
-
-      // ── Simple ops ──
-      if (b.type === "FORWARD")     ops.push({ type: "FORWARD",  steps: b.steps ?? 1 });
-      else if (b.type === "BACKWARD")    ops.push({ type: "BACKWARD", steps: b.steps ?? 1 });
-      else if (b.type === "TURN_RIGHT")  ops.push({ type: "TURN_RIGHT" });
-      else if (b.type === "TURN_LEFT")   ops.push({ type: "TURN_LEFT" });
-      else if (b.type === "WAIT")        ops.push({ type: "WAIT" });
-      else if (b.type === "STOP")        ops.push({ type: "STOP" });
-      i += 1;
+      case 7:
+        return compilerResult.status === "success";
+      default:
+        return false;
     }
-    return ops;
-  }, []);
+  }, [compilerResult.status, currentTutorialStep, program, tutorialStep]);
 
-  // ── Simulation ─────────────────────────────────────────────────────────────
-  const runSimulation = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    const startPos = findStart();
-    let pos: [number, number] = [...startPos] as [number, number];
-    let dir: Dir = config.startDir;
-    const visited = new Set<string>([`${pos[0]}-${pos[1]}`]);
-    let sensors = readSensors(pos, dir);
-    let ticks = 0;
-    const ops = buildFlatOps(program);
-    let idx = 0;
+  const cardPlacementStyle = useMemo(() => {
+    if (!targetRect) {
+      return { bottom: "32px", left: "32px" };
+    }
 
-    setCanSend(false);
-    setAttempts((a) => a + 1);
-    setSim({ pos: [...pos] as [number, number], dir, visited: new Set(visited), status: "running", message: "Simulacion iniciada...", sensors: { ...sensors }, stepLabel: "" });
+    const W = typeof window !== "undefined" ? window.innerWidth : 1200;
+    const H = typeof window !== "undefined" ? window.innerHeight : 800;
 
-    const finish = (status: Exclude<SimStatus, "running" | "idle">, message: string) => {
-      setSim({ pos: [...pos] as [number, number], dir, visited: new Set(visited), status, message, sensors: { ...sensors }, stepLabel: "" });
-      if (status === "success") setCanSend(true);
-    };
+    const isTargetInLeft = targetRect.left < W / 2;
+    const isTargetInBottom = targetRect.top > H / 2;
 
-    const move1 = (d: Dir): "ok" | "collision" | "oob" => {
-      const [dr, dc] = DIR_DELTA[d];
-      const next: [number, number] = [pos[0] + dr, pos[1] + dc];
-      const cell = getCell(next);
-      if (cell === null) { pos = next; visited.add(`${next[0]}-${next[1]}`); sensors = readSensors(pos, dir); return "oob"; }
-      if (cell === 1)    { pos = next; visited.add(`${next[0]}-${next[1]}`); sensors = readSensors(pos, dir); return "collision"; }
-      pos = next; visited.add(`${next[0]}-${next[1]}`); sensors = readSensors(pos, dir); return "ok";
-    };
+    if (isTargetInLeft && isTargetInBottom) {
+      return { bottom: "32px", right: "32px" };
+    }
 
-    const tick = () => {
-      if (ticks++ > MAX_SIM_TICKS) { finish("incomplete", "Limite de pasos alcanzado."); return; }
-      if (idx >= ops.length) {
-        if (getCell(pos) === 3) finish("success", "Simulacion exitosa. El robot llego a la meta.");
-        else finish("incomplete", "El programa termino pero el robot no llego a la meta.");
-        return;
-      }
-      const op = ops[idx];
-      if (!op) { finish("incomplete", "Bloque desconocido."); return; }
-      let label = "";
+    if (isTargetInLeft && !isTargetInBottom) {
+      return { bottom: "32px", right: "32px" };
+    }
 
-      switch (op.type) {
-        case "FORWARD": {
-          label = `Avanzando ${op.steps} celda(s)`;
-          for (let s = 0; s < op.steps; s++) {
-            const r = move1(dir);
-            if (r === "collision") { finish("collision", "El robot choco."); return; }
-            if (r === "oob")       { finish("oob",       "El robot salio del area."); return; }
-          }
-          idx += 1; break;
-        }
-        case "BACKWARD": {
-          label = `Retrocediendo ${op.steps} celda(s)`;
-          const bd = ((dir + 2) % 4) as Dir;
-          for (let s = 0; s < op.steps; s++) {
-            const r = move1(bd);
-            if (r === "collision") { finish("collision", "El robot choco."); return; }
-            if (r === "oob")       { finish("oob",       "El robot salio del area."); return; }
-          }
-          idx += 1; break;
-        }
-        case "TURN_RIGHT":
-          label = "Girando derecha";
-          dir = ((dir + 1) % 4) as Dir;
-          sensors = readSensors(pos, dir);
-          idx += 1; break;
+    if (!isTargetInLeft && !isTargetInBottom) {
+      return { bottom: "32px", left: "32px" };
+    }
 
-        case "TURN_LEFT":
-          label = "Girando izquierda";
-          dir = ((dir + 3) % 4) as Dir;
-          sensors = readSensors(pos, dir);
-          idx += 1; break;
+    return { bottom: "32px", right: "32px" };
+  }, [targetRect]);
 
-        case "WAIT":
-          label = "Esperando...";
-          idx += 1; break;
+  useEffect(() => {
+    if (!showTutorial || !tutorialVisible || !currentTutorialStep) return;
+    if (!canAdvanceTutorial || tutorialStep >= TUTORIAL_STEPS.length - 1) return;
 
-        case "STOP":
-          if (getCell(pos) === 3) finish("success", "Simulacion exitosa. El robot llego a la meta.");
-          else finish("incomplete", "El robot se detuvo antes de llegar a la meta.");
-          return;
+    const timer = window.setTimeout(() => {
+      setTutorialStep((current) => Math.min(current + 1, TUTORIAL_STEPS.length - 1));
+    }, 300);
 
-        // ── IF_OBS_ELSE — FIX: jump to the right branch op, execute it, then jump to afterIdx ──
-        case "IF_OBS_ELSE": {
-          const chosen = sensors.obstacleAhead ? op.ifOpIdx : op.elseOpIdx;
-          label = sensors.obstacleAhead ? "If: hay obstaculo" : "If: sin obstaculo";
-          const br = ops[chosen];
-          if (br) {
-            if (br.type === "FORWARD") {
-              // ✅ FIX: respect br.steps (was being ignored before)
-              for (let s = 0; s < br.steps; s++) {
-                const r = move1(dir);
-                if (r === "collision") { finish("collision", "El robot choco en rama If."); return; }
-                if (r === "oob")       { finish("oob",       "El robot salio del area en rama If."); return; }
-              }
-            } else if (br.type === "BACKWARD") {
-              const bd = ((dir + 2) % 4) as Dir;
-              // ✅ FIX: respect br.steps
-              for (let s = 0; s < br.steps; s++) {
-                const r = move1(bd);
-                if (r === "collision") { finish("collision", "El robot choco en rama If."); return; }
-                if (r === "oob")       { finish("oob",       "El robot salio del area en rama If."); return; }
-              }
-            } else if (br.type === "TURN_RIGHT") {
-              dir = ((dir + 1) % 4) as Dir;
-              sensors = readSensors(pos, dir);
-            } else if (br.type === "TURN_LEFT") {
-              dir = ((dir + 3) % 4) as Dir;
-              sensors = readSensors(pos, dir);
-            }
-            // WAIT / anything else: no movement
-          }
-          // ✅ FIX: always jump to afterIdx (skips both branch slots cleanly)
-          idx = op.afterIdx;
+    return () => window.clearTimeout(timer);
+  }, [canAdvanceTutorial, currentTutorialStep, showTutorial, tutorialStep, tutorialVisible]);
+
+  const canCompile = program.length > 1;
+  const programView = useMemo(() => {
+    const stopIndex = program.findIndex((block) => block.type === "STOP");
+
+    const buildView = (startIndex: number, endIndex: number = program.length): ProgramViewItem[] => {
+      const items: ProgramViewItem[] = [];
+
+      for (let index = startIndex; index < endIndex; index += 1) {
+        const block = program[index];
+        if (!block) break;
+
+        if (block.type === "STOP") {
+          items.push({ kind: "block", block, index });
           break;
         }
 
-        default: idx += 1; break;
+        if (block.type === "IF_OBS_ELSE") {
+          const ifBranch = program[index + 1];
+          const elseBranch = program[index + 2];
+          const loopEndIndex = stopIndex !== -1 && stopIndex > index ? stopIndex : endIndex;
+          const loopBody = buildView(index + 3, loopEndIndex);
+
+          items.push({
+            kind: "conditional",
+            block,
+            index,
+            ifBranch,
+            ifIndex: index + 1,
+            elseBranch,
+            elseIndex: index + 2,
+            ifLoopBody: ifBranch?.type === "REPEAT" ? loopBody : undefined,
+            elseLoopBody: elseBranch?.type === "REPEAT" ? loopBody : undefined,
+          });
+          if (ifBranch?.type === "REPEAT" || elseBranch?.type === "REPEAT") {
+            if (loopEndIndex > index) {
+              index = loopEndIndex - 1;
+            }
+            continue;
+          }
+
+          index += 2;
+          continue;
+        }
+
+        if (block.type === "REPEAT") {
+          const loopEndIndex = stopIndex !== -1 && stopIndex > index ? stopIndex : endIndex;
+          items.push({
+            kind: "loop",
+            block,
+            index,
+            body: buildView(index + 1, loopEndIndex),
+            bodyStartIndex: index + 1,
+          });
+          if (loopEndIndex > index) {
+            index = loopEndIndex - 1;
+          }
+          continue;
+        }
+
+        items.push({ kind: "block", block, index });
       }
 
-      setSim({ pos: [...pos] as [number, number], dir, visited: new Set(visited), status: "running", message: "", sensors: { ...sensors }, stepLabel: label });
-      timerRef.current = setTimeout(tick, TICK_MS);
+      return items;
     };
 
-    timerRef.current = setTimeout(tick, TICK_MS);
-  }, [buildFlatOps, config.startDir, findStart, getCell, program, readSensors]);
+    return buildView(0);
+  }, [program]);
 
-  const stopSim = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setSim((c) => ({ ...c, status: "idle", message: "Simulacion detenida.", stepLabel: "" }));
-  };
+  const renderBlockRow = (
+    block: Block,
+    index: number,
+    options?: { nested?: boolean; className?: string; allowSteps?: boolean }
+  ) => {
+    const isHighlighted = compilerResult.highlightIndexes.includes(index);
+    const nested = options?.nested ?? false;
+    const showSteps = (options?.allowSteps ?? nested) && block.type === "FORWARD";
 
-  // ── Status display ─────────────────────────────────────────────────────────
-  const statusInfo = {
-    idle:       { color: "text-gray-500",   label: "Sin probar",      icon: null },
-    running:    { color: "text-indigo-600", label: "Ejecutando...",   icon: <span className="inline-block w-2 h-2 rounded-full bg-indigo-500 animate-pulse" /> },
-    success:    { color: "text-emerald-600",label: "Exito",           icon: <CheckCircle size={14} weight="fill" className="text-emerald-600" /> },
-    collision:  { color: "text-red-600",    label: "Colision",        icon: <Warning size={14} weight="fill" className="text-red-600" /> },
-    oob:        { color: "text-amber-600",  label: "Fuera del area",  icon: <Warning size={14} weight="fill" className="text-amber-600" /> },
-    incomplete: { color: "text-amber-600",  label: "Incompleto",      icon: <Warning size={14} weight="fill" className="text-amber-600" /> },
-  }[sim.status];
-
-  // ── Tutorial helpers ───────────────────────────────────────────────────────
-  const tutorialActionLabel = (() => {
-    if (!currentTutStep) return "Siguiente";
-    if (tutorialStep >= TUTORIAL_STEPS.length - 1) return "Terminar";
-    if (!canAdvanceTutorial) return tutorialStep === 2 ? "Prueba primero" : "Completa el paso";
-    return "Siguiente";
-  })();
-
-  const closeTutorial   = () => { setTutorialVisible(false); setFocusRect(null); };
-  const nextTutorialStep = () => {
-    if (!canAdvanceTutorial) return;
-    if (tutorialStep >= TUTORIAL_STEPS.length - 1) { closeTutorial(); return; }
-    setTutorialStep((s) => s + 1);
-  };
-  const prevTutorialStep = () => setTutorialStep((s) => Math.max(0, s - 1));
-
-  // ── Block row renderer (simple) ────────────────────────────────────────────
-  const renderSimpleBlockRow = (block: Block, index: number) => {
-    const isMovement = block.type === "FORWARD" || block.type === "BACKWARD";
     return (
-      <div key={block.id} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border ${block.colorClass}`}>
-        <span className="text-[10px] font-mono text-gray-400 w-5 flex-shrink-0">{index + 1}</span>
+      <div
+        key={block.id}
+        className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border ${block.colorClass} ${
+          isHighlighted ? "ring-2 ring-red-400 bg-red-50" : ""
+        } ${options?.className ?? ""} ${nested ? "shadow-sm" : ""}`}
+      >
+        <span className="text-[10px] font-mono text-gray-400 w-4 flex-shrink-0">
+          {index + 1}
+        </span>
         <span className="flex-shrink-0">{block.icon}</span>
-        <span className="text-xs font-mono flex-1 leading-tight">{block.label}</span>
-        {isMovement && (
-          <div className="flex items-center gap-1 ml-auto mr-1">
-            <span className="text-[10px] font-mono text-gray-500">pasos</span>
-            <input type="number" min={1} max={9} value={block.steps ?? 1}
-              onChange={(e) => updateSteps(block.id, Number(e.target.value))}
-              onClick={(e) => e.stopPropagation()}
-              className="w-10 text-xs font-mono text-center rounded border border-cyan-300 bg-white text-cyan-700 px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-cyan-400"
+        <span className="text-xs font-mono flex-1">{block.label}</span>
+        {showSteps && (
+          <label
+            className="flex items-center gap-1 rounded-md border border-cyan-200 bg-white px-2 py-1 text-[10px] font-mono text-cyan-700"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span>pasos</span>
+            <input
+              type="number"
+              min={1}
+              max={9}
+              step={1}
+              value={normalizeStepCount(block.steps ?? 1)}
+              onChange={(event) => {
+                const nextSteps = normalizeStepCount(Number(event.target.value));
+                setProgram((current) =>
+                  current.map((currentBlock) =>
+                    currentBlock.id === block.id
+                      ? { ...currentBlock, steps: nextSteps }
+                      : currentBlock
+                  )
+                );
+                setCompilerResult({
+                  status: "idle",
+                  message: "La secuencia cambio. Vuelve a compilar para validar la nueva version.",
+                  issues: [],
+                  highlightIndexes: [],
+                });
+              }}
+              className="w-9 bg-transparent text-center text-[10px] font-mono outline-none"
             />
-          </div>
+          </label>
         )}
         {index > 0 && (
-          <button onClick={() => removeBlock(block.id)} className="text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0 ml-1">
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              removeBlock(block.id);
+            }}
+            className="text-gray-500 hover:text-gray-700 transition-colors flex-shrink-0 ml-auto"
+          >
             <X size={13} />
           </button>
         )}
@@ -600,536 +526,840 @@ export default function AdvancedLevelEditor({ config, stage, missionIndex }: Pro
     );
   };
 
-  // ── FOR_REPEAT card renderer ───────────────────────────────────────────────
-  const renderForRepeatCard = (forBlock: Block, forIndex: number, bodyBlock: Block | undefined, bodyIndex: number) => (
-    <div key={forBlock.id} className={`rounded-xl border ${forBlock.colorClass} overflow-hidden`}>
-      <div className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left">
-        <div className="flex flex-1 items-center gap-2.5">
-          <span className="text-[10px] font-mono text-gray-400 w-5 flex-shrink-0">{forIndex + 1}</span>
-          <span className="flex-shrink-0">{forBlock.icon}</span>
-          <span className="text-xs font-mono flex-1 leading-tight">{forBlock.label}</span>
-          <div className="flex items-center gap-1.5 mr-1">
-            <span className="text-[10px] font-mono font-bold">N =</span>
-            <input
-              type="number" min={1} max={20} value={forBlock.repeatCount ?? 3}
-              onChange={(e) => updateRepeatCount(forBlock.id, Number(e.target.value))}
-              onClick={(e) => e.stopPropagation()}
-              className="w-12 text-xs font-mono text-center rounded border border-indigo-300 bg-white text-indigo-700 px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-            />
+  const renderLoopCard = (
+    block: Block,
+    index: number,
+    bodyChildren: ReactNode[],
+    bodyPlaceholder: string
+  ) => {
+    const isHighlighted = compilerResult.highlightIndexes.includes(index);
+    const loopIterations = normalizeStepCount(block.steps ?? 3);
+    const isNInputActive = showTutorial && tutorialVisible && tutorialStep === 2;
+
+    return (
+      <div
+        key={block.id}
+        className={`rounded-xl border ${block.colorClass} ${
+          isHighlighted ? "ring-2 ring-red-400 bg-red-50" : ""
+        } overflow-hidden`}
+      >
+        <div className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left bg-white/40">
+          <div className="flex flex-1 items-center gap-2.5 text-left">
+            <span className="text-[10px] font-mono text-gray-400 w-4 flex-shrink-0">
+              {index + 1}
+            </span>
+            <span className="flex-shrink-0">{block.icon}</span>
+            <span className="text-xs font-mono">{block.label}</span>
+            <div className="flex items-center gap-1.5 ml-2">
+              <span className="text-xs font-mono text-indigo-750 font-semibold">(N =</span>
+              <input
+                id="input-loop-n"
+                type="number"
+                min={1}
+                max={9}
+                value={loopIterations}
+                onChange={(e) => {
+                  const val = normalizeStepCount(Number(e.target.value));
+                  setProgram((current) =>
+                    current.map((curr) =>
+                      curr.id === block.id ? { ...curr, steps: val } : curr
+                    )
+                  );
+                  setCompilerResult({
+                    status: "idle",
+                    message: "La secuencia cambio. Vuelve a compilar para validar la nueva version.",
+                    issues: [],
+                    highlightIndexes: [],
+                  });
+                }}
+                className={`w-10 text-center font-bold text-xs bg-white border rounded px-1 py-0.5 text-indigo-700 focus:outline-none transition-all ${
+                  isNInputActive
+                    ? "ring-4 ring-indigo-500 ring-offset-1 border-indigo-500 animate-pulse bg-indigo-50"
+                    : "border-indigo-200"
+                }`}
+              />
+              <span className="text-xs font-mono text-indigo-750 font-semibold">)</span>
+            </div>
+            <span className="text-[10px] font-mono text-gray-400 ml-auto uppercase tracking-wider">
+              Repite lo de abajo
+            </span>
           </div>
-          <span className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">Repite lo de abajo</span>
+          <button
+            type="button"
+            onClick={() => removeBlock(block.id)}
+            className="text-gray-500 hover:text-gray-700 transition-colors flex-shrink-0"
+          >
+            <X size={13} />
+          </button>
         </div>
-        <button onClick={() => removeBlock(forBlock.id)} className="text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0 ml-1">
-          <X size={13} />
-        </button>
-      </div>
-      <div className="px-3 pb-3">
-        <div className="rounded-lg border border-white/70 bg-white/75 p-2.5">
-          <div className="mb-2 flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-indigo-600">
-            <Repeat size={10} className="text-indigo-500 flex-shrink-0" />
-            Accion a repetir {forBlock.repeatCount ?? 3} veces
+
+        <div className="px-3 pb-3">
+          <div className="rounded-lg border border-white/70 bg-white/75 p-2.5">
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-indigo-600">
+              ACCION A REPETIR {loopIterations} VECES
+            </div>
+            {bodyChildren.length > 0 ? (
+              <div className="flex flex-col gap-1.5">{bodyChildren}</div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500">
+                {bodyPlaceholder}
+              </div>
+            )}
           </div>
-          {bodyBlock ? (
-            <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border ${bodyBlock.colorClass} shadow-sm`}>
-              <span className="text-[10px] font-mono text-gray-400 w-5 flex-shrink-0">{bodyIndex + 1}</span>
-              <span className="flex-shrink-0">{bodyBlock.icon}</span>
-              <span className="text-xs font-mono flex-1 leading-tight">{bodyBlock.label}</span>
-              {(bodyBlock.type === "FORWARD" || bodyBlock.type === "BACKWARD") && (
-                <div className="flex items-center gap-1 ml-auto mr-1">
-                  <span className="text-[10px] font-mono text-gray-500">pasos</span>
-                  <input
-                    type="number" min={1} max={9} value={bodyBlock.steps ?? 1}
-                    onChange={(e) => updateSteps(bodyBlock.id, Number(e.target.value))}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-10 text-xs font-mono text-center rounded border border-cyan-300 bg-white text-cyan-700 px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                  />
-                </div>
-              )}
-              <button onClick={() => removeBlock(bodyBlock.id)} className="text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0 ml-1">
+        </div>
+      </div>
+    );
+  };
+
+  const renderProgramItems = (
+    items: ProgramViewItem[],
+    nested = false,
+    allowSteps = false
+  ): ReactNode[] =>
+    items.map((item) => {
+      if (item.kind === "block") {
+        return renderBlockRow(item.block, item.index, { nested, allowSteps });
+      }
+
+      if (item.kind === "conditional") {
+        const isHighlighted = [item.index, item.ifIndex, item.elseIndex].some((index) =>
+          typeof index === "number" ? compilerResult.highlightIndexes.includes(index) : false
+        );
+
+        return (
+          <div
+            key={item.block.id}
+            className={`rounded-xl border ${item.block.colorClass} ${
+              isHighlighted ? "ring-2 ring-red-400 bg-red-50" : ""
+            } overflow-hidden`}
+          >
+            <div className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left">
+              <div className="flex flex-1 items-center gap-2.5 text-left">
+                <span className="text-[10px] font-mono text-gray-400 w-4 flex-shrink-0">
+                  {item.index + 1}
+                </span>
+                <span className="flex-shrink-0">{item.block.icon}</span>
+                <span className="text-xs font-mono flex-1">{item.block.label}</span>
+                <span className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">
+                  Dos respuestas
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeBlock(item.block.id)}
+                className="text-gray-500 hover:text-gray-700 transition-colors flex-shrink-0"
+              >
                 <X size={13} />
               </button>
             </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500">
-              Agrega aqui el bloque que se repetira N veces
+
+            <div className="px-3 pb-3">
+              <div className="flex flex-col gap-2.5 rounded-lg border border-white/70 bg-white/75 p-2.5">
+                <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-amber-600">
+                  <Warning size={12} weight="fill" />
+                  Si hay obstaculo
+                </div>
+                {item.ifBranch ? (
+                  item.ifBranch.type === "REPEAT" ? (
+                    renderLoopCard(
+                      item.ifBranch,
+                      item.ifIndex ?? item.index + 1,
+                      renderProgramItems(item.ifLoopBody ?? [], true, false),
+                      "Agrega aqui la ruta que se repetira"
+                    )
+                  ) : (
+                    renderBlockRow(item.ifBranch, item.ifIndex ?? item.index + 1, {
+                      nested: true,
+                      className: "bg-white/90",
+                    })
+                  )
+                ) : (
+                  <div className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500">
+                    Agrega aqui la respuesta del obstaculo
+                  </div>
+                )}
+
+                <div className="mx-4 h-4 border-l-2 border-dashed border-gray-300" />
+
+                <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-emerald-600">
+                  <CheckCircle size={12} weight="fill" />
+                  Si no hay obstaculo
+                </div>
+                {item.elseBranch ? (
+                  item.elseBranch.type === "REPEAT" ? (
+                    renderLoopCard(
+                      item.elseBranch,
+                      item.elseIndex ?? item.index + 2,
+                      renderProgramItems(item.elseLoopBody ?? [], true, false),
+                      "Agrega aqui la ruta que se repetira"
+                    )
+                  ) : (
+                    renderBlockRow(item.elseBranch, item.elseIndex ?? item.index + 2, {
+                      nested: true,
+                      className: "bg-white/90",
+                    })
+                  )
+                ) : (
+                  <div className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500">
+                    Agrega aqui la respuesta libre
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-        </div>
-      </div>
-    </div>
+          </div>
+        );
+      }
+
+      if (item.kind === "loop") {
+        return renderLoopCard(
+          item.block,
+          item.index,
+          renderProgramItems(item.body, true, false),
+          "Agrega aqui la ruta que se repetira"
+        );
+      }
+
+      return null;
+    });
+
+  const compileProgram = useCallback(() => {
+    if (!canCompile) {
+      setCompilerResult({
+        status: "idle",
+        message: "Agrega bloques al programa antes de compilar.",
+        issues: [],
+        highlightIndexes: [],
+      });
+      return;
+    }
+
+    const issues: CompilerIssue[] = [];
+    const pushIssue = (message: string, index?: number) => {
+      issues.push({ message, index });
+    };
+
+    const countBlocks = (type: BlockType) => program.filter((block) => block.type === type).length;
+    const stopIndexInProgram = program.findIndex((block) => block.type === "STOP");
+
+    if (program[0]?.type !== "INIT" || countBlocks("INIT") !== 1) {
+      pushIssue("El programa debe comenzar con un solo bloque Iniciar mision.", 0);
+    }
+
+    if (program.length < 2) {
+      pushIssue("Agrega al menos una instruccion de lectura o movimiento.");
+    }
+
+    if (countBlocks("STOP") !== 1) {
+      pushIssue("Esta mision necesita exactamente un bloque Detener.");
+    } else if (stopIndexInProgram !== program.length - 1) {
+      pushIssue(
+        `El bloque "${BLOCK_LABELS.STOP}" debe quedar al final para detener el robot en la meta.`,
+        stopIndexInProgram
+      );
+    }
+
+    // Level-specific constraints
+    if (stage.id === 1) {
+      const repeatIdx = program.findIndex((b) => b.type === "REPEAT");
+      if (repeatIdx === -1) {
+        pushIssue("Debes incluir el bloque Repetir N veces.");
+      } else if (program[repeatIdx].steps !== 4) {
+        pushIssue("Configura el valor de N en 4 para recorrer la distancia exacta hasta la meta.", repeatIdx);
+      }
+    }
+
+    program.forEach((block, index) => {
+      if (block.type === "FORWARD" || block.type === "BACKWARD") {
+        if (!Number.isInteger(block.steps ?? 1) || (block.steps ?? 1) < 1) {
+          pushIssue(`El bloque "${BLOCK_LABELS[block.type]}" necesita un numero mayor que 0.`, index);
+        }
+      }
+    });
+
+    const executionBlocks = program.filter((block) => block.type !== "INIT");
+    const stopIndex = executionBlocks.findIndex((block) => block.type === "STOP");
+    const loopExitIndex = stopIndex !== -1 ? stopIndex : executionBlocks.length;
+    const MAX_STEPS = 220;
+    const MAX_LOOPS = 20;
+    const DIR_DELTA: [number, number][] = [
+      [0, 1],
+      [1, 0],
+      [0, -1],
+      [-1, 0],
+    ];
+    const getCell = (pos: [number, number]) => stage.grid[pos[0]]?.[pos[1]] ?? null;
+    const readSensors = (pos: [number, number], dir: Dir) => {
+      const [dr, dc] = DIR_DELTA[dir];
+      const frontCell = getCell([pos[0] + dr, pos[1] + dc]);
+      return {
+        obstacleAhead: frontCell === null || frontCell === 1,
+      };
+    };
+
+    const moveRobot = (
+      pos: [number, number],
+      movementDir: Dir
+    ): { nextPos: [number, number]; status: "ok" | "collision" | "oob" } => {
+      const delta = DIR_DELTA[movementDir];
+      const next: [number, number] = [pos[0] + delta[0], pos[1] + delta[1]];
+      const cell = getCell(next);
+
+      if (cell === null) {
+        return { nextPos: next, status: "oob" };
+      }
+
+      if (cell === 1) {
+        return { nextPos: next, status: "collision" };
+      }
+
+      return { nextPos: next, status: "ok" };
+    };
+
+    const findStartPos = (): [number, number] => {
+      for (let r = 0; r < stage.grid.length; r++) {
+        const c = stage.grid[r].indexOf(2);
+        if (c !== -1) return [r, c];
+      }
+      return [...config.start] as [number, number];
+    };
+    let pos: [number, number] = findStartPos();
+    let dir: Dir = config.startDir;
+    let sensors = readSensors(pos, dir);
+    let stepIdx = 0;
+    let stepCount = 0;
+    let loopCount = 0;
+    let loopStartIndex: number | null = null;
+    let loopMaxIterations = 0;
+    let skipAfterBranch = 0;
+    let evaluationMessage = "El programa no llega a la meta.";
+
+    while (stepCount++ <= MAX_STEPS) {
+      if (stepIdx >= executionBlocks.length) {
+        if (getCell(pos) === 3) {
+          evaluationMessage = "La secuencia llega a la meta correctamente.";
+          break;
+        }
+        evaluationMessage = "El programa no llega a la meta.";
+        break;
+      }
+
+      const block = executionBlocks[stepIdx++];
+      if (!block) {
+        evaluationMessage = "La secuencia tiene un bloque incompleto.";
+        break;
+      }
+
+      switch (block.type as BlockType) {
+        case "FORWARD": {
+          for (let step = 0; step < normalizeStepCount(block.steps ?? 1); step += 1) {
+            const moved = moveRobot(pos, dir);
+            pos = moved.nextPos;
+            sensors = readSensors(pos, dir);
+            if (moved.status === "collision") {
+              evaluationMessage = "El robot choco con un obstaculo.";
+              break;
+            }
+            if (moved.status === "oob") {
+              evaluationMessage = "El robot salio del area permitida.";
+              break;
+            }
+          }
+          break;
+        }
+        case "BACKWARD": {
+          const backDir = ((dir + 2) % 4) as Dir;
+          for (let step = 0; step < normalizeStepCount(block.steps ?? 1); step += 1) {
+            const moved = moveRobot(pos, backDir);
+            pos = moved.nextPos;
+            sensors = readSensors(pos, dir);
+            if (moved.status === "collision") {
+              evaluationMessage = "El robot choco retrocediendo.";
+              break;
+            }
+            if (moved.status === "oob") {
+              evaluationMessage = "El robot salio del area permitida al retroceder.";
+              break;
+            }
+          }
+          break;
+        }
+        case "TURN_RIGHT":
+          dir = ((dir + 1) % 4) as Dir;
+          sensors = readSensors(pos, dir);
+          break;
+        case "TURN_LEFT":
+          dir = ((dir + 3) % 4) as Dir;
+          sensors = readSensors(pos, dir);
+          break;
+        case "WAIT":
+          break;
+        case "STOP":
+          if (getCell(pos) === 3) {
+            evaluationMessage = "La secuencia llega a la meta correctamente.";
+          } else {
+            evaluationMessage = "El robot se detuvo antes de llegar a la meta.";
+          }
+          stepCount = MAX_STEPS + 100; // trigger exit
+          break;
+        case "IF_OBS_ELSE": {
+          if (sensors.obstacleAhead) {
+            skipAfterBranch = 1;
+          } else {
+            stepIdx += 1;
+          }
+          break;
+        }
+        case "REPEAT": {
+          loopStartIndex = stepIdx;
+          loopMaxIterations = block.steps ?? 3;
+          loopCount = 0;
+          break;
+        }
+        default:
+          break;
+      }
+
+      if (evaluationMessage !== "El programa no llega a la meta." && evaluationMessage !== "La secuencia llega a la meta correctamente.") {
+        break;
+      }
+
+      if (skipAfterBranch > 0) {
+        stepIdx += skipAfterBranch;
+        skipAfterBranch = 0;
+      }
+
+      if (loopStartIndex !== null && stepIdx === loopExitIndex && getCell(pos) !== 3) {
+        loopCount += 1;
+        if (loopCount >= loopMaxIterations) {
+          loopStartIndex = null;
+        } else {
+          stepIdx = loopStartIndex;
+        }
+      }
+    }
+
+    if (getCell(pos) === 3) {
+      evaluationMessage = "La secuencia llega a la meta correctamente.";
+    }
+
+    const isSuccess = evaluationMessage === "La secuencia llega a la meta correctamente." && issues.length === 0;
+
+    setCompilerResult({
+      status: isSuccess ? "success" : "error",
+      message: isSuccess ? evaluationMessage : `No se pudo compilar: ${evaluationMessage}`,
+      issues,
+      highlightIndexes: issues.map((issue) => issue.index).filter((idx): idx is number => typeof idx === "number"),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canCompile, config.start, config.startDir, normalizeStepCount, program, stage.grid]);
+
+  const goToRobot = () => {
+    if (compilerResult.status === "success") {
+      const nextUnlocked = Math.min(LEVEL_3_STAGES.length, missionIndex + 1);
+      const currentStored =
+        typeof window !== "undefined"
+          ? Number(window.localStorage.getItem("bekie-level-3-progress") ?? "1")
+          : 1;
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          "bekie-level-3-progress",
+          String(Math.max(currentStored, nextUnlocked))
+        );
+      }
+      if (showTutorial) {
+        setTutorialVisible(false);
+      }
+      router.push("/robot");
+    }
+  };
+
+  const paletteHint = useMemo(
+    () => {
+      if (stage.id === 1) {
+        return "Usa Repetir N veces para tramos fijos y Si hay obstaculo para tomar decisiones automáticas.";
+      }
+      return "Logica avanzada: encadena condicionales y bucles. Observa los sensores del robot en el simulador.";
+    },
+    [stage.id]
   );
 
-  // ── IF_OBS_ELSE card renderer ──────────────────────────────────────────────
-  const renderIfElseCard = (
-    ifBlock: Block, ifIndex: number,
-    ifBranch: Block | undefined, ifBranchIndex: number,
-    elseBranch: Block | undefined, elseBranchIndex: number,
-  ) => {
-    const branchRow = (branch: Block | undefined, branchIndex: number) =>
-      branch ? (
-        <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border ${branch.colorClass} shadow-sm bg-white/90`}>
-          <span className="text-[10px] font-mono text-gray-400 w-5 flex-shrink-0">{branchIndex + 1}</span>
-          <span className="flex-shrink-0">{branch.icon}</span>
-          <span className="text-xs font-mono flex-1 leading-tight">{branch.label}</span>
-          {(branch.type === "FORWARD" || branch.type === "BACKWARD") && (
-            <div className="flex items-center gap-1 ml-auto mr-1">
-              <span className="text-[10px] font-mono text-gray-500">pasos</span>
-              <input type="number" min={1} max={9} value={branch.steps ?? 1}
-                onChange={(e) => updateSteps(branch.id, Number(e.target.value))}
-                onClick={(e) => e.stopPropagation()}
-                className="w-10 text-xs font-mono text-center rounded border border-cyan-300 bg-white text-cyan-700 px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-              />
-            </div>
-          )}
-          <button onClick={() => removeBlock(branch.id)} className="text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0 ml-1">
-            <X size={13} />
-          </button>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500">
-          Agrega aqui el bloque de respuesta
-        </div>
-      );
+  // Active step highlight checks
+  const isRepeatPaletteHighlighted = showTutorial && tutorialVisible && tutorialStep === 0;
+  const isForwardPaletteHighlighted = showTutorial && tutorialVisible && (tutorialStep === 1 || tutorialStep === 3);
+  const isTurnRightPaletteHighlighted = showTutorial && tutorialVisible && tutorialStep === 2;
+  const isTurnLeftPaletteHighlighted = showTutorial && tutorialVisible && tutorialStep === 4;
+  const isStopPaletteHighlighted = showTutorial && tutorialVisible && tutorialStep === 5;
+  const isCompileButtonHighlighted = showTutorial && tutorialVisible && tutorialStep === 7;
 
-    return (
-      <div key={ifBlock.id} className={`rounded-xl border ${ifBlock.colorClass} overflow-hidden`}>
-        <div className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left">
-          <div className="flex flex-1 items-center gap-2.5">
-            <span className="text-[10px] font-mono text-gray-400 w-5 flex-shrink-0">{ifIndex + 1}</span>
-            <span className="flex-shrink-0">{ifBlock.icon}</span>
-            <span className="text-xs font-mono flex-1 leading-tight">{ifBlock.label}</span>
-            <span className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">Dos respuestas</span>
-          </div>
-          <button onClick={() => removeBlock(ifBlock.id)} className="text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0 ml-1">
-            <X size={13} />
-          </button>
-        </div>
-        <div className="px-3 pb-3">
-          <div className="flex flex-col gap-2.5 rounded-lg border border-white/70 bg-white/75 p-2.5">
-            <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-amber-600">
-              <Warning size={12} weight="fill" />
-              Si hay obstaculo
-            </div>
-            {branchRow(ifBranch, ifBranchIndex)}
-            <div className="mx-4 h-4 border-l-2 border-dashed border-gray-300" />
-            <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-emerald-600">
-              <CheckCircle size={12} weight="fill" />
-              Si no hay obstaculo
-            </div>
-            {branchRow(elseBranch, elseBranchIndex)}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // ── Program list renderer ──────────────────────────────────────────────────
-  const renderProgram = () => {
-    const items: React.ReactNode[] = [];
-    let i = 0;
-    while (i < program.length) {
-      const block = program[i];
-
-      if (block.type === "IF_OBS_ELSE") {
-        const ifBranch   = program[i + 1];
-        const elseBranch = program[i + 2];
-        const ifIsStructural   = !ifBranch   || ["IF_OBS_ELSE","FOR_REPEAT","STOP"].includes(ifBranch.type);
-        const elseIsStructural = !elseBranch || ["IF_OBS_ELSE","FOR_REPEAT","STOP"].includes(elseBranch.type);
-        items.push(renderIfElseCard(
-          block, i,
-          ifIsStructural   ? undefined : ifBranch,   i + 1,
-          elseIsStructural ? undefined : elseBranch, i + 2,
-        ));
-        i += 1 + (ifIsStructural ? 0 : 1) + (elseIsStructural ? 0 : 1);
-        continue;
-      }
-
-      if (block.type === "FOR_REPEAT") {
-        const nextBlock = program[i + 1];
-        const hasBody = nextBlock && !["STOP","FOR_REPEAT","IF_OBS_ELSE"].includes(nextBlock.type);
-        items.push(renderForRepeatCard(block, i, hasBody ? nextBlock : undefined, i + 1));
-        i += hasBody ? 2 : 1;
-        continue;
-      }
-
-      items.push(renderSimpleBlockRow(block, i));
-      i += 1;
-    }
-    return items;
-  };
-
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-[100dvh] bg-white flex flex-col">
+    <div className="relative min-h-[100dvh] bg-white flex flex-col overflow-x-hidden select-none">
       <AppNav userName="Beymar" role="student" />
 
-      {/* Top bar */}
-      <div className="sticky top-[52px] z-30 border-b border-gray-300/60 bg-white/95 backdrop-blur px-4 py-2.5 flex items-center justify-between gap-3">
-        <Link href="/levels/3/mission" className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-700 transition-colors">
-          <ArrowLeft size={13} />
-          Mision
-        </Link>
-        <span className="text-xs font-mono text-gray-600 hidden sm:block">Nivel 2 — Avanzado / {stage.title}</span>
-        <div className="flex items-center gap-2">
-          <button onClick={clearProgram} className="btn-press flex items-center gap-1.5 text-xs text-gray-600 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors">
-            <Trash size={13} />
-            Limpiar
-          </button>
-          {sim.status === "running" ? (
-            <button onClick={stopSim} className="btn-press flex items-center gap-1.5 text-xs text-red-600 px-3 py-1.5 rounded-lg border border-red-300 hover:border-red-500 transition-colors">
-              <StopCircle size={13} weight="fill" />
-              Detener
-            </button>
-          ) : (
-            <button
-              ref={runRef}
-              onClick={runSimulation}
-              disabled={program.length < 2}
-              className="btn-press flex items-center gap-1.5 text-xs bg-indigo-600 text-white font-semibold px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Play size={13} weight="fill" />
-              Compilar
-            </button>
-          )}
-          <button
-            onClick={() => {
-              if (!canSend) return;
-              const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-              const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
-              const ss = String(elapsed % 60).padStart(2, "0");
-              if (typeof window !== "undefined") {
-                window.localStorage.setItem("bekie-result-3", JSON.stringify({
-                  mission: missionIndex, success: true, blocks: program.length, attempts,
-                  time: `${mm}:${ss}`, stageTitle: stage.title, stageDifficulty: stage.difficulty,
-                  stageVictory: stage.victory, stageTip: stage.tips[0] ?? "",
-                  isLast: missionIndex >= LEVEL_3_STAGES.length,
-                }));
-              }
-              router.push("/results2");
-            }}
-            disabled={!canSend}
-            className={`btn-press flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${canSend ? "bg-emerald-500 text-white hover:bg-emerald-400" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
-          >
-            <Cpu size={13} weight="duotone" />
-            Cargar
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden">
-        {/* ── Palette ── */}
-        <div ref={paletteRef} className="w-[230px] lg:w-[260px] flex-shrink-0 border-r border-gray-300 bg-white overflow-y-auto">
-          <div className="p-3">
-            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider mb-2 px-1">Bloques</p>
-
-            {isTutorial && tutorialVisible && currentTutStep && currentTutStep.target === "palette" && (
-              <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2.5">
-                <p className="text-[10px] font-mono font-semibold text-indigo-700 uppercase tracking-wider mb-1">{currentTutStep.title}</p>
-                <p className="text-[11px] leading-relaxed text-indigo-800">{currentTutStep.text}</p>
-              </div>
-            )}
-
-            {(!tutorialVisible || !currentTutStep || currentTutStep.target !== "palette") && config.helperText && (
-              <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-[11px] leading-relaxed text-indigo-700">
-                {config.helperText}
-              </div>
-            )}
-
-            <div className="flex flex-col gap-3">
-              <div>
-                <p className="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-1.5 px-0.5">Movimiento</p>
-                <div className="flex flex-col gap-1.5">
-                  {config.palette
-                    .filter((d) => ["INIT","FORWARD","BACKWARD","TURN_RIGHT","TURN_LEFT","WAIT","STOP"].includes(d.type))
-                    .map((def, i) => (
-                      <button key={`${def.type}-${i}`} onClick={() => addBlock(def)} className={getPaletteClass(def)}>
-                        <span className="flex-shrink-0">{def.icon}</span>
-                        <span className="text-xs font-mono">{def.label}</span>
-                        <Plus size={11} className="ml-auto opacity-40" />
-                      </button>
-                    ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-1.5 px-0.5">Estructuras</p>
-                <div className="flex flex-col gap-1.5">
-                  {config.palette
-                    .filter((d) => ["IF_OBS_ELSE","FOR_REPEAT"].includes(d.type))
-                    .map((def, i) => (
-                      <button key={`${def.type}-${i}`} onClick={() => addBlock(def)} className={getPaletteClass(def)}>
-                        <span className="flex-shrink-0">{def.icon}</span>
-                        <span className="text-xs font-mono leading-tight">{def.label}</span>
-                        <Plus size={11} className="ml-auto opacity-40 flex-shrink-0" />
-                      </button>
-                    ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Program editor ── */}
-        <div ref={programRef} className="flex-1 flex flex-col min-w-0 border-r border-gray-300">
-          <div className="p-3 border-b border-gray-300/60 flex items-center justify-between">
-            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">Programa ({program.length}/30)</p>
-            <span className="text-[10px] font-mono text-indigo-600 uppercase tracking-wider">Mision {missionIndex}/5</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3">
-            <div className="flex flex-col gap-1.5">
-              {renderProgram()}
-              {program.length < 2 && (
-                <div className="flex items-center gap-2 py-3 px-3 text-xs text-gray-500 border border-dashed border-gray-300 rounded-lg">
-                  <Plus size={13} />
-                  Agrega bloques desde el panel izquierdo
-                </div>
-              )}
-            </div>
-            <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <p className="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-2">Como usar las estructuras</p>
-              <div className="flex flex-col gap-2 text-[10px] text-gray-600 leading-relaxed">
-                <div className="flex items-start gap-1.5">
-                  <Repeat size={10} className="text-indigo-500 mt-0.5 flex-shrink-0" />
-                  <span><span className="font-semibold">Repetir N veces:</span> agrega el For, luego el bloque a repetir. El bloque quedara dentro del For y se ejecutara exactamente N veces.</span>
-                </div>
-                <div className="flex items-start gap-1.5">
-                  <Warning size={10} className="text-amber-500 mt-0.5 flex-shrink-0" />
-                  <span><span className="font-semibold">Si hay obstaculo:</span> agrega el bloque If/Else, luego el bloque para cuando hay obstaculo y el bloque para cuando no hay obstaculo.</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Simulator ── */}
-        <div className="w-[290px] lg:w-[330px] flex-shrink-0 flex flex-col">
-          <div className="p-3 border-b border-gray-300/60">
-            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">Simulador — {stage.scenarioLabel}</p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            {/* Grid */}
-            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
-              {Array.from({ length: gridSize }).map((_, row) =>
-                Array.from({ length: gridSize }).map((_, col) => {
-                  const cell = grid[row][col];
-                  const isRobot   = sim.pos[0] === row && sim.pos[1] === col;
-                  const isVisited = sim.visited.has(`${row}-${col}`) && !isRobot;
+      {/* Intro Modal / Selector de Matriz - Styled exactly as requested */}
+      {scenarioIntroVisible && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px] p-4 animate-fade-in">
+          <div className="w-full max-w-[450px] bg-white rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col p-8 text-center transition-all duration-300">
+            <p className="text-[11px] font-semibold font-mono text-indigo-600 uppercase tracking-widest mb-1.5">
+              NIVEL 2 - AVANZADO / MISIÓN {missionIndex}
+            </p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">{stage.title}</h2>
+            
+            {/* Grid Visual representation */}
+            <div className="aspect-square w-full max-w-[260px] mx-auto border border-gray-100 bg-gray-50/50 rounded-2xl p-4 mb-6 grid gap-2" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
+              {Array.from({ length: gridSize }).map((_, r) =>
+                Array.from({ length: gridSize }).map((_, c) => {
+                  const isStart = stage.grid[r][c] === 2;
+                  const isGoal = stage.grid[r][c] === 3;
+                  const isObstacle = stage.grid[r][c] === 1;
                   return (
-                    <div key={`${row}-${col}`} className={`aspect-square rounded-sm flex items-center justify-center text-[11px] font-mono transition-colors duration-200 ${
-                      isRobot
-                        ? (sim.status === "collision" ? "bg-red-500 text-white font-bold" : "bg-indigo-600 text-white font-bold")
-                        : cell === 1 ? "bg-gray-600 border border-gray-500"
-                        : cell === 3 ? "bg-emerald-100 border border-emerald-400"
-                        : cell === 2 && !isRobot ? "bg-gray-200 border border-gray-300"
-                        : isVisited ? "bg-indigo-100 border border-indigo-300"
-                        : "bg-gray-50 border border-gray-200"
-                    }`}>
-                      {isRobot && <span className="text-base">{DIR_ARROW[sim.dir]}</span>}
-                      {cell === 3 && !isRobot && <span className="text-emerald-700 text-[9px] font-bold">META</span>}
-                      {cell === 1 && <span className="text-gray-300">■</span>}
-                      {cell === 2 && !isRobot && <span className="text-gray-500 text-sm font-bold">{DIR_ARROW[config.startDir]}</span>}
+                    <div
+                      key={`${r}-${c}`}
+                      className={`aspect-square rounded-lg flex items-center justify-center font-bold text-[10px] transition-all duration-300 ${
+                        isStart
+                          ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                          : isGoal
+                          ? "bg-emerald-100 border border-emerald-300 text-emerald-700 font-bold"
+                          : isObstacle
+                          ? "bg-gray-600 text-white"
+                          : "bg-white border border-gray-100 shadow-sm"
+                      }`}
+                    >
+                      {isStart && "→"}
+                      {isGoal && "META"}
                     </div>
                   );
                 })
               )}
             </div>
 
-            {/* Status */}
-            <div className={`flex items-start gap-2 text-xs p-3 rounded-lg bg-gray-50 border ${
-              sim.status === "success"    ? "border-emerald-400"
-              : sim.status === "collision" || sim.status === "oob" ? "border-red-400"
-              : sim.status === "incomplete" ? "border-amber-400"
-              : sim.status === "running"  ? "border-indigo-400"
-              : "border-gray-200"
-            }`}>
-              {statusInfo.icon && <span className="mt-0.5">{statusInfo.icon}</span>}
-              <div className="flex-1 min-w-0">
-                <p className={`font-medium font-mono ${statusInfo.color}`}>{statusInfo.label}</p>
-                {sim.stepLabel && <p className="text-indigo-600 text-[10px] mt-0.5 font-mono truncate">{sim.stepLabel}</p>}
-                {sim.message   && <p className="text-gray-600 mt-0.5 text-[11px]">{sim.message}</p>}
-              </div>
+            <div className="rounded-2xl border border-indigo-100/60 bg-indigo-50/40 p-5 text-left mb-6">
+              <p className="text-[10px] font-bold font-mono text-indigo-600 uppercase tracking-wider mb-2">
+                INSTRUCCIONES DEL ESCENARIO
+              </p>
+              <p className="text-xs text-gray-700 leading-relaxed font-mono">
+                {stage.summary}
+              </p>
             </div>
-
-            {/* Sensors */}
-            <div className="bg-white border border-gray-200 rounded-xl p-3">
-              <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-2.5">Sensores de proximidad</p>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: "Frontal",    value: formatDist(sim.sensors.front), accent: "text-indigo-600", border: "border-indigo-200" },
-                  { label: "Izquierdo",  value: formatDist(sim.sensors.left),  accent: "text-amber-600",  border: "border-amber-200"  },
-                  { label: "Derecho",    value: formatDist(sim.sensors.right), accent: "text-cyan-600",   border: "border-cyan-200"   },
-                ].map((s) => (
-                  <div key={s.label} className={`rounded-lg border ${s.border} bg-gray-50 p-2`}>
-                    <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">{s.label}</p>
-                    <p className={`text-sm font-bold font-mono ${s.accent}`}>{s.value}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-2.5 flex items-center justify-between text-[11px] font-mono text-gray-500">
-                <span>Via frontal</span>
-                <span className={sim.sensors.obstacleAhead ? "text-red-600 font-semibold" : "text-emerald-600 font-semibold"}>
-                  {sim.sensors.obstacleAhead ? "⚠ Obstaculo" : "✓ Libre"}
-                </span>
-              </div>
-            </div>
-
-            {/* Scenario info */}
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3">
-              <p className="text-[10px] font-mono text-indigo-700 uppercase tracking-wider mb-1">{stage.scenarioLabel}</p>
-              <p className="text-sm font-semibold text-gray-900">{stage.title}</p>
-              <p className="text-[11px] leading-relaxed text-gray-600 mt-1">{stage.summary}</p>
-            </div>
-
-            {/* Instructions */}
-            <div className="bg-white border border-gray-200 rounded-xl p-3">
-              <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-2">Instrucciones</p>
-              <div className="flex flex-col gap-1.5">
-                {stage.instructions.map((inst, i) => (
-                  <div key={i} className="flex items-start gap-2 text-[11px] text-gray-600">
-                    <span className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[9px] font-mono font-bold mt-0.5">{i + 1}</span>
-                    {inst}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Legend */}
-            <div className="flex flex-col gap-1.5 text-[11px] font-mono text-gray-500">
-              <p className="text-[9px] uppercase tracking-wider mb-0.5">Leyenda</p>
-              {[
-                { cell: "bg-indigo-600",                        label: "Robot" },
-                { cell: "bg-emerald-100 border border-emerald-400", label: "Meta" },
-                { cell: "bg-gray-600",                          label: "Obstaculo" },
-                { cell: "bg-indigo-100 border border-indigo-300",   label: "Camino recorrido" },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-2">
-                  <span className={`w-3 h-3 rounded-sm flex-shrink-0 ${item.cell}`} />
-                  {item.label}
-                </div>
-              ))}
-            </div>
-
-            <div className="text-[11px] font-mono text-gray-500">
-              <span className="text-[9px] uppercase tracking-wider">Direccion: </span>
-              <span className="text-indigo-600">{DIR_ARROW[sim.dir]} {DIR_LABEL[sim.dir]}</span>
-            </div>
-          </div>
-
-          {canSend && (
-            <div className="p-3 border-t border-emerald-300 bg-emerald-50">
-              <button
-                onClick={() => {
-                  const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-                  const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
-                  const ss = String(elapsed % 60).padStart(2, "0");
-                  if (typeof window !== "undefined") {
-                    window.localStorage.setItem("bekie-result-3", JSON.stringify({
-                      mission: missionIndex, success: true, blocks: program.length, attempts,
-                      time: `${mm}:${ss}`, stageTitle: stage.title, stageDifficulty: stage.difficulty,
-                      stageVictory: stage.victory, stageTip: stage.tips[0] ?? "",
-                      isLast: missionIndex >= LEVEL_3_STAGES.length,
-                    }));
-                  }
-                  router.push("/results2");
-                }}
-                className="btn-press w-full flex items-center justify-center gap-2 text-sm font-semibold text-white bg-emerald-600 py-2.5 rounded-lg hover:bg-emerald-500 transition-colors"
-              >
-                <Cpu size={14} weight="duotone" />
-                Enviar al robot fisico
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Tutorial overlay ── */}
-      {isTutorial && tutorialVisible && currentTutStep && focusRect && (
-        <div className="fixed inset-0 z-[80] pointer-events-none">
-          <div
-            className="absolute rounded-2xl border-2 border-indigo-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.68)] transition-all duration-200"
-            style={{ top: focusRect.top, left: focusRect.left, width: focusRect.width, height: focusRect.height }}
-          />
-          <div className="absolute left-4 right-4 bottom-4 sm:left-6 sm:right-auto sm:max-w-[390px] pointer-events-auto">
-            <div className="rounded-2xl border border-white/20 bg-gray-950 text-white shadow-2xl p-4">
-              <div className="flex items-center justify-between gap-3 mb-2">
-                <p className="text-xs font-mono uppercase tracking-wider text-indigo-300">{currentTutStep.title}</p>
-                <span className="text-[10px] font-mono text-gray-300">{tutorialStep + 1}/{TUTORIAL_STEPS.length}</span>
-              </div>
-              <p className="text-sm leading-relaxed text-gray-100">{currentTutStep.text}</p>
-              {!canAdvanceTutorial && (
-                <p className="mt-2 text-[11px] leading-relaxed text-indigo-200">{currentTutStep.lockText}</p>
-              )}
-              <div className="mt-4 flex items-center justify-between gap-2">
-                <button onClick={closeTutorial} className="btn-press text-[11px] font-semibold px-3 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-900 transition-colors">
-                  Omitir
-                </button>
-                <div className="flex items-center gap-2">
-                  <button onClick={prevTutorialStep} disabled={tutorialStep === 0} className="btn-press text-[11px] font-semibold px-3 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                    Atrás
-                  </button>
-                  <button onClick={nextTutorialStep} disabled={!canAdvanceTutorial} className="btn-press text-[11px] font-semibold px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-45 disabled:cursor-not-allowed">
-                    {tutorialActionLabel}
-                  </button>
-                </div>
-              </div>
-            </div>
+            
+            <button
+              onClick={() => {
+                setScenarioIntroVisible(false);
+                if (showTutorial) setTutorialVisible(true);
+              }}
+              className="btn-press bg-indigo-600 hover:bg-indigo-750 text-white font-bold text-sm py-3.5 rounded-2xl shadow-lg shadow-indigo-600/20 transition-all duration-200 w-full"
+            >
+              Comenzar Tutorial
+            </button>
           </div>
         </div>
       )}
 
-      {/* ── Scenario intro modal ── */}
-      {scenarioIntroVisible && (
-        <motion.div
-          className="fixed inset-0 z-[90] flex cursor-pointer items-center justify-center bg-black/75 px-4 py-6"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          transition={{ duration: 0.25, ease: EASE_OUT }}
-          onClick={dismissScenarioIntro}
+      {/* Editor Header */}
+      <div className="sticky top-[52px] z-30 border-b border-gray-300/60 bg-white/95 backdrop-blur px-4 py-2.5 flex items-center justify-between gap-3">
+        <Link
+          href={`/levels/3/mission`}
+          className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-700 transition-colors"
         >
-          <motion.div
-            className="w-full max-w-5xl rounded-[28px] border border-white/20 bg-white shadow-2xl overflow-hidden"
-            initial={{ scale: 0.94, y: 18, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }}
-            transition={{ duration: 0.32, ease: EASE_OUT }}
+          <ArrowLeft size={13} />
+          Misión
+        </Link>
+        <span className="text-xs font-mono text-gray-600 hidden sm:block">
+          {config.level} - {config.levelSlug} / {stage.title}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={clearProgram}
+            className="btn-press flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors"
           >
-            <div className="bg-indigo-50/85 border-b border-indigo-200 px-5 py-4">
-              <p className="text-[10px] font-mono text-indigo-700 uppercase tracking-[0.3em] mb-2">
-                Presiona en cualquier lugar para continuar
-              </p>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{stage.scenarioLabel}</p>
-                  <p className="text-2xl font-bold tracking-tight text-gray-900 mt-1">{stage.title}</p>
+            <Trash size={13} />
+            Limpiar
+          </button>
+          <button
+            id="btn-compile"
+            ref={compileRef}
+            onClick={compileProgram}
+            disabled={!canCompile}
+            className={`btn-press flex items-center gap-1.5 text-xs text-white font-semibold px-4 py-1.5 rounded-lg transition-all duration-300 ${
+              isCompileButtonHighlighted
+                ? "bg-indigo-650 ring-4 ring-indigo-500 ring-offset-2 animate-pulse scale-105 z-50 relative border-2 border-white shadow-xl"
+                : "bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            }`}
+          >
+            Compilar
+          </button>
+          <button
+            ref={loadRef}
+            onClick={goToRobot}
+            disabled={compilerResult.status !== "success"}
+            className={`btn-press flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+              compilerResult.status === "success"
+                ? "bg-emerald-500 text-white hover:bg-emerald-400"
+                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+            }`}
+          >
+            <Cpu size={13} weight="duotone" />
+            Cargar programa
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* Block Palette */}
+        <div
+          ref={paletteRef}
+          className="w-[230px] lg:w-[250px] flex-shrink-0 border-r border-gray-300 bg-white overflow-y-auto"
+        >
+          <div className="p-3">
+            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider mb-2 px-1">
+              Bloques
+            </p>
+            {paletteHint && (
+              <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-[11px] leading-relaxed text-indigo-700">
+                {paletteHint}
+              </div>
+            )}
+            <div className="flex flex-col gap-1.5">
+              {config.palette.map((def, i) => {
+                const isPaletteHighlighted =
+                  (def.type === "REPEAT" && isRepeatPaletteHighlighted) ||
+                  (def.type === "FORWARD" && isForwardPaletteHighlighted) ||
+                  (def.type === "TURN_RIGHT" && isTurnRightPaletteHighlighted) ||
+                  (def.type === "TURN_LEFT" && isTurnLeftPaletteHighlighted) ||
+                  (def.type === "STOP" && isStopPaletteHighlighted);
+
+                return (
+                   <button
+                     id={`btn-palette-${def.type.toLowerCase()}`}
+                     key={`${def.type}-${i}`}
+                     onClick={() => addBlock(def)}
+                     className={`block-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                       isPaletteHighlighted
+                         ? "border-indigo-500 ring-4 ring-indigo-500 ring-offset-1 bg-indigo-50 animate-pulse text-indigo-900 z-50 relative scale-[1.03] shadow-md"
+                         : def.colorClass
+                     } hover:brightness-105`}
+                   >
+                    <span className="flex-shrink-0">{def.icon}</span>
+                    <span className="text-xs font-mono flex-1">{def.label}</span>
+                    <Plus size={11} className="opacity-40 flex-shrink-0" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Program Editor Panel */}
+        <div ref={programRef} className="flex-1 flex flex-col min-w-0 border-r border-gray-300 bg-gray-50/50">
+          <div className="p-3 border-b border-gray-300/60 flex items-center justify-between">
+            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
+              Programa ({program.length}/25)
+            </p>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 max-w-[560px] mx-auto w-full">
+            <div className="flex flex-col gap-2">
+              {renderProgramItems(programView, false, true)}
+              {program.length < 2 && (
+                <div className="flex items-center justify-center gap-2 py-8 px-4 text-xs text-gray-400 border border-dashed border-gray-300 bg-white rounded-xl">
+                  <Plus size={14} />
+                  Agrega bloques desde el panel izquierdo
                 </div>
-                <p className="text-xs font-mono px-2.5 py-1 rounded-full bg-indigo-400/10 text-indigo-700 flex-shrink-0">
-                  {stage.difficulty}
-                </p>
-              </div>
-              <p className="mt-2 text-sm text-gray-600 leading-relaxed">{stage.summary}</p>
+              )}
             </div>
-            <div className="p-5">
-              <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
-                {Array.from({ length: gridSize }).map((_, row) =>
-                  Array.from({ length: gridSize }).map((_, col) => {
-                    const cell = grid[row][col];
-                    return (
-                      <div key={`intro-${row}-${col}`} className={`aspect-square rounded-md flex items-center justify-center text-[11px] font-mono ${
-                        cell === 1 ? "bg-gray-600 border border-gray-500"
-                        : cell === 3 ? "bg-emerald-100 border border-emerald-400"
-                        : cell === 2 ? "bg-gray-200 border border-gray-300"
-                        : "bg-gray-50 border border-gray-200"
-                      }`}>
-                        {cell === 3 && <span className="text-emerald-700 text-[9px] font-bold">META</span>}
-                        {cell === 1 && <span className="text-gray-300">■</span>}
-                        {cell === 2 && <span className="text-gray-500 text-sm font-bold">{DIR_ARROW[config.startDir]}</span>}
-                      </div>
-                    );
-                  })
+          </div>
+        </div>
+
+        {/* 2D Simulator & Console */}
+        <div className="w-[300px] lg:w-[340px] flex-shrink-0 flex flex-col border-l border-gray-200">
+          <div className="p-3 border-b border-gray-300/60">
+            <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
+              Simulador & Consola
+            </p>
+          </div>
+          <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto">
+            {/* Visual Grid representation */}
+            <div className="aspect-square w-full max-w-[280px] mx-auto border border-gray-200 bg-gray-50 rounded-xl p-3 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
+              {Array.from({ length: gridSize }).map((_, r) =>
+                Array.from({ length: gridSize }).map((_, c) => {
+                  const isStart = stage.grid[r][c] === 2;
+                  const isGoal = stage.grid[r][c] === 3;
+                  const isObstacle = stage.grid[r][c] === 1;
+                  return (
+                    <div
+                      key={`${r}-${c}`}
+                      className={`rounded flex items-center justify-center font-bold text-[9px] ${
+                        isStart
+                          ? "bg-indigo-600 text-white"
+                          : isGoal
+                          ? "bg-emerald-100 border border-emerald-400 text-emerald-700 animate-pulse"
+                          : isObstacle
+                          ? "bg-gray-600 text-white"
+                          : "bg-white border border-gray-200"
+                      }`}
+                    >
+                      {isStart && "→"}
+                      {isGoal && "META"}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Status card */}
+            <div
+              className={`p-4 rounded-xl border flex flex-col gap-2 ${
+                compilerResult.status === "success"
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                  : compilerResult.status === "error"
+                  ? "border-red-300 bg-red-50 text-red-800"
+                  : "border-gray-200 bg-gray-50 text-gray-600"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {compilerResult.status === "success" ? (
+                  <CheckCircle size={18} weight="fill" className="text-emerald-500" />
+                ) : compilerResult.status === "error" ? (
+                  <Warning size={18} weight="fill" className="text-red-500" />
+                ) : (
+                  <span className="w-2.5 h-2.5 rounded-full bg-gray-400" />
                 )}
+                <span className="text-xs font-mono font-bold uppercase tracking-wider">
+                  {compilerResult.status === "success"
+                    ? "Compilacion exitosa"
+                    : compilerResult.status === "error"
+                    ? "Errores detectados"
+                    : "Esperando Compilacion"}
+                </span>
               </div>
-              <p className="mt-4 text-sm text-gray-700 leading-relaxed">{stage.objective}</p>
-              <p className="mt-2 text-xs text-indigo-700 leading-relaxed">
-                {isTutorial ? "Esta es la primera mision: un tutorial guiado paso a paso." : "Programa tu solucion y pruebala en el simulador antes de enviar al robot."}
-              </p>
+              <p className="text-xs leading-relaxed">{compilerResult.message}</p>
             </div>
-          </motion.div>
+
+            {/* Stage description info block */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col gap-2">
+              <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">{stage.scenarioLabel}</p>
+              <h4 className="font-bold text-sm text-gray-800">{stage.title}</h4>
+              <p className="text-xs text-gray-600 leading-relaxed">{stage.summary}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Static Backdrop Spotlight Overlay (Adjusts Contrast only, No Flicker/Pulse) */}
+      {showTutorial && tutorialVisible && targetRect && (
+        <div
+          className="fixed pointer-events-none transition-all duration-200"
+          style={{
+            left: targetRect.left - 6,
+            top: targetRect.top - 6,
+            width: targetRect.width + 12,
+            height: targetRect.height + 12,
+            borderRadius:
+              tutorialStep === 7
+                ? "9999px"
+                : "12px",
+            boxShadow: "0 0 0 9999px rgba(9, 13, 22, 0.55)",
+            zIndex: 39,
+          }}
+        />
+      )}
+
+      {/* Pulsing Glow Ring around the Target element (No full-screen Shadow to prevent Flicker) */}
+      {showTutorial && tutorialVisible && targetRect && (
+        <div
+          className="fixed pointer-events-none transition-all duration-200 animate-pulse"
+          style={{
+            left: targetRect.left - 6,
+            top: targetRect.top - 6,
+            width: targetRect.width + 12,
+            height: targetRect.height + 12,
+            borderRadius:
+              tutorialStep === 7
+                ? "9999px"
+                : "12px",
+            border: "5px solid #ffffff",
+            boxShadow: "0 0 15px rgba(255, 255, 255, 0.9)",
+            zIndex: 40,
+          }}
+        />
+      )}
+
+      {/* Tutorial overlay - Sleek dark card exactly like the user's screenshot, draggable freely */}
+      {showTutorial && tutorialVisible && currentTutorialStep && (
+        <motion.div
+          drag
+          dragMomentum={false}
+          dragElastic={0.1}
+          className="fixed w-[380px] bg-[#090d16] border border-slate-800 shadow-2xl shadow-black/85 rounded-3xl p-6 flex flex-col gap-4 select-none cursor-grab active:cursor-grabbing"
+          style={{ zIndex: 45, ...cardPlacementStyle }}
+        >
+          {/* Drag Handle Bar */}
+          <div className="w-12 h-1 bg-slate-850 rounded-full mx-auto -mt-2 opacity-60" />
+
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <span className="text-[11px] font-bold font-mono text-indigo-400 uppercase tracking-widest">
+              PASO {tutorialStep + 1}
+            </span>
+            <span className="text-[11px] font-mono text-slate-500">
+              {tutorialStep + 1}/{TUTORIAL_STEPS.length}
+            </span>
+          </div>
+          
+          <p className="text-xs text-slate-200 leading-relaxed font-mono">
+            {currentTutorialStep.text}
+          </p>
+          
+          <div className="flex justify-between items-center mt-2 pt-3 border-t border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-indigo-400 text-[11px] font-bold font-mono shadow-md">
+                N
+              </div>
+              <button
+                onClick={() => {
+                  setTutorialVisible(false);
+                }}
+                className="text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+              >
+                Omitir
+              </button>
+            </div>
+            
+            <div className="flex gap-2">
+              {tutorialStep > 0 && (
+                <button
+                  onClick={() => {
+                    setTutorialStep((current) => Math.max(0, current - 1));
+                  }}
+                  className="border border-slate-850 hover:bg-slate-800/40 text-slate-300 font-semibold text-xs px-4 py-2 rounded-xl transition-all"
+                >
+                  Atrás
+                </button>
+              )}
+              {tutorialStep === 7 ? (
+                <button
+                  onClick={() => {
+                    setTutorialVisible(false);
+                  }}
+                  className="bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-lg shadow-indigo-650/30 transition-all"
+                >
+                  Terminar
+                </button>
+              ) : (
+                <button
+                  disabled={!canAdvanceTutorial}
+                  onClick={() => {
+                    setTutorialStep((current) => Math.min(current + 1, TUTORIAL_STEPS.length - 1));
+                  }}
+                  className={`font-bold text-xs px-4 py-2 rounded-xl transition-all ${
+                    canAdvanceTutorial
+                      ? "bg-indigo-650 hover:bg-indigo-750 text-white shadow-lg shadow-indigo-650/30 cursor-pointer"
+                      : "bg-slate-900 text-slate-600 border border-slate-850 cursor-not-allowed"
+                  }`}
+                >
+                  {canAdvanceTutorial ? "Siguiente" : "Completa el paso"}
+                </button>
+              )}
+            </div>
+          </div>
         </motion.div>
       )}
     </div>
