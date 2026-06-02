@@ -30,6 +30,7 @@ La aplicación está organizada bajo el App Router de Next.js (`app/`), componen
 * [app/page.tsx](file:///c:/Users/Beymar/Desktop/BEKIE/app/page.tsx): Landing page principal con información comercial de la plataforma, un simulador en miniatura interactivo y la presentación del equipo de desarrollo.
 * [app/login/page.tsx](file:///c:/Users/Beymar/Desktop/BEKIE/app/login/page.tsx) y [app/register/page.tsx](file:///c:/Users/Beymar/Desktop/BEKIE/app/register/page.tsx): Interfaces para la autenticación y registro de usuarios (estudiantes/docentes).
 * [app/dashboard/page.tsx](file:///c:/Users/Beymar/Desktop/BEKIE/app/dashboard/page.tsx): Panel de control del estudiante que muestra el progreso global del curso, rachas, estadísticas de misiones resueltas y el acceso rápido a los niveles.
+* [app/scenario-setup/page.tsx](file:///c:/Users/Beymar/Desktop/BEKIE/app/scenario-setup/page.tsx): Pantalla de inducción y preparación obligatoria del escenario físico 5x5, implementada con Three.js, Fiber, Drei y React Spring.
 * [app/levels/page.tsx](file:///c:/Users/Beymar/Desktop/BEKIE/app/levels/page.tsx): Selector de niveles de aprendizaje (Nivel 0: Básico y Nivel 1: Intermedio) con el detalle del progreso actual.
 * **Rutas Dinámicas de Niveles:**
   * [app/levels/[level]/mission/page.tsx](file:///c:/Users/Beymar/Desktop/BEKIE/app/levels/%5Blevel%5D/mission/page.tsx): Presenta el objetivo de aprendizaje del nivel, instrucciones detalladas, condiciones de victoria y desglose de misiones disponibles.
