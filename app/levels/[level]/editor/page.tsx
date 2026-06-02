@@ -18,6 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   LEVEL_EDITORS as BASIC_LEVEL_EDITORS,
+  LEVEL_0_STAGES,
   type BlockType,
   type Dir,
   type LevelKey,
@@ -68,23 +69,70 @@ const genId = () => `b_${++uid}`;
 
 const formatDistance = (value: number | null) => (value === null ? "--" : `${value} cm`);
 
+/* ── Level-0 compiler ── */
+const ADVANCED_BLOCK_TYPES: BlockType[] = ["IF_OBS", "IF_OBS_ELSE", "WHILE_GOAL"];
+const MOVEMENT_BLOCK_TYPES: BlockType[] = ["FORWARD", "BACKWARD", "TURN_RIGHT", "TURN_LEFT", "WAIT"];
+
+function compileLevel0(blocks: { type: BlockType }[]): string | null {
+  if (blocks.length === 0 || blocks[0].type !== "INIT") {
+    return "Tu programa debe comenzar con el bloque Iniciar mision.";
+  }
+  const initCount = blocks.filter((b) => b.type === "INIT").length;
+  if (initCount > 1) {
+    return "Solo puedes usar un bloque Iniciar mision.";
+  }
+  const hasAdvanced = blocks.some((b) => ADVANCED_BLOCK_TYPES.includes(b.type));
+  if (hasAdvanced) {
+    return "Este bloque pertenece a un nivel mas avanzado.";
+  }
+  const lastBlock = blocks[blocks.length - 1];
+  if (!lastBlock || lastBlock.type !== "STOP") {
+    return "Tu programa debe terminar con el bloque Detener.";
+  }
+  const stopIdx = blocks.findIndex((b) => b.type === "STOP");
+  if (stopIdx < blocks.length - 1) {
+    return "No puede haber instrucciones despues de Detener.";
+  }
+  const hasMovement = blocks.some((b) => MOVEMENT_BLOCK_TYPES.includes(b.type));
+  if (!hasMovement) {
+    return "Agrega al menos un bloque de movimiento.";
+  }
+  return null;
+}
+
 export default function EditorPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const levelKey = ((params.level as string) || "1") as LevelKey;
   const isIntermediate = levelKey === "2";
+  const isBasic = levelKey === "1";
   const config = isIntermediate
     ? INTERMEDIATE_LEVEL_EDITORS["2"]
     : BASIC_LEVEL_EDITORS["1"];
   const missionIndexRaw = Number(searchParams.get("mission") ?? "1");
   const missionIndex = Math.min(
-    LEVEL_2_STAGES.length,
+    isIntermediate ? LEVEL_2_STAGES.length : LEVEL_0_STAGES.length,
     Math.max(1, Number.isNaN(missionIndexRaw) ? 1 : missionIndexRaw)
   );
-  const stage = LEVEL_2_STAGES[missionIndex - 1] ?? LEVEL_2_STAGES[0];
+  const stage = isIntermediate
+    ? (LEVEL_2_STAGES[missionIndex - 1] ?? LEVEL_2_STAGES[0])
+    : (LEVEL_0_STAGES[missionIndex - 1] ?? LEVEL_0_STAGES[0]);
 
-  const grid = config.grid;
+  const activeGrid = isBasic ? stage.grid : config.grid;
+  const activeStart: [number, number] = isBasic
+    ? (() => {
+        for (let r = 0; r < stage.grid.length; r++) {
+          for (let c = 0; c < stage.grid[r].length; c++) {
+            if (stage.grid[r][c] === 2) return [r, c];
+          }
+        }
+        return [0, 0];
+      })()
+    : config.start;
+  const [compileError, setCompileError] = useState<string | null>(null);
+
+  const grid = activeGrid;
   const gridSize = grid.length;
   const initialProgram = useCallback(
     (): Block[] => [{ ...config.palette[0], id: genId() }],
@@ -92,9 +140,9 @@ export default function EditorPage() {
   );
   const initialSim = useCallback(
     (): SimState => ({
-      pos: [...config.start] as [number, number],
+      pos: [...activeStart] as [number, number],
       dir: config.startDir,
-      visited: new Set([`${config.start[0]}-${config.start[1]}`]),
+      visited: new Set([`${activeStart[0]}-${activeStart[1]}`]),
       status: "idle",
       message: "",
       sensors: {
@@ -104,7 +152,8 @@ export default function EditorPage() {
         obstacleAhead: false,
       },
     }),
-    [config.start, config.startDir]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeStart[0], activeStart[1], config.startDir]
   );
 
   const [program, setProgram] = useState<Block[]>(() => initialProgram());
@@ -194,7 +243,16 @@ export default function EditorPage() {
   const runSimulation = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    let pos: [number, number] = [...config.start] as [number, number];
+    if (isBasic) {
+      const err = compileLevel0(program);
+      if (err) {
+        setCompileError(err);
+        return;
+      }
+    }
+    setCompileError(null);
+
+    let pos: [number, number] = [...activeStart] as [number, number];
     let dir: Dir = config.startDir;
     const visited = new Set<string>([`${pos[0]}-${pos[1]}`]);
     let sensors = readSensors(pos, dir);
@@ -212,7 +270,17 @@ export default function EditorPage() {
 
     const finish = (status: Exclude<SimStatus, "running" | "idle">, message: string) => {
       syncState(pos, dir, visited, sensors, status, message);
-      if (status === "success") setCanSend(true);
+      if (status === "success") {
+        setCanSend(true);
+        if (isBasic && typeof window !== "undefined") {
+          const key = "bekie-level-0-progress";
+          const stored = Number(window.localStorage.getItem(key) ?? "1");
+          const current = Number.isNaN(stored) ? 1 : stored;
+          const next = Math.min(LEVEL_0_STAGES.length, Math.max(current, missionIndex + 1));
+          window.localStorage.setItem(key, String(next));
+          window.dispatchEvent(new Event("storage"));
+        }
+      }
     };
 
     const moveRobot = (movementDir: Dir, collisionMessage: string, oobMessage: string) => {
@@ -410,7 +478,8 @@ export default function EditorPage() {
     };
 
     scheduleNext();
-  }, [config.start, config.startDir, getCell, normalizeStepCount, program, readSensors, syncState]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStart[0], activeStart[1], config.startDir, getCell, isBasic, normalizeStepCount, program, readSensors, syncState]);
 
   const stopSim = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -463,7 +532,7 @@ export default function EditorPage() {
           Mision
         </Link>
         <span className="text-xs font-mono text-gray-600 hidden sm:block">
-          {config.level} - {config.levelSlug} / Editor
+          {config.level} - {config.levelSlug} / Mision {missionIndex}/{isBasic ? LEVEL_0_STAGES.length : LEVEL_2_STAGES.length}
         </span>
         <div className="flex items-center gap-2">
           <button
@@ -583,7 +652,7 @@ export default function EditorPage() {
         <div className="w-[280px] lg:w-[320px] flex-shrink-0 flex flex-col">
           <div className="p-3 border-b border-gray-300/60">
             <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
-              Simulador 2D
+              Simulador 2D {isBasic && <span className="text-gray-400 normal-case">· Mision {missionIndex}</span>}
             </p>
           </div>
 
@@ -653,6 +722,32 @@ export default function EditorPage() {
                 )}
               </div>
             </div>
+
+            {compileError && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-300">
+                <Warning size={13} weight="fill" className="text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[11px] font-semibold font-mono text-red-600">Error de compilacion</p>
+                  <p className="text-[11px] text-red-700 mt-0.5">{compileError}</p>
+                </div>
+              </div>
+            )}
+
+            {isBasic && sim.status === "success" && missionIndex < LEVEL_0_STAGES.length && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-300">
+                <CheckCircle size={13} weight="fill" className="text-emerald-600 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-[11px] font-semibold font-mono text-emerald-700">Mision completada</p>
+                  <p className="text-[11px] text-emerald-600 mt-0.5">Mision {missionIndex + 1} desbloqueada.</p>
+                </div>
+                <button
+                  onClick={() => router.push(`/levels/${levelKey}/editor?mission=${missionIndex + 1}`)}
+                  className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2 py-1 rounded-md transition-colors"
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
 
             {isIntermediate && (
               <div className="bg-white border border-gray-200 rounded-xl p-4">

@@ -23,7 +23,10 @@ export default function LoginPage() {
       if (role === "teacher") {
         router.push("/teacher");
       } else {
-        router.push("/dashboard");
+        const scenarioReady = typeof window !== "undefined"
+          ? localStorage.getItem("bekie-scenario-ready") === "true"
+          : false;
+        router.push(scenarioReady ? "/dashboard" : "/scenario-setup");
       }
     }, 1000);
   };

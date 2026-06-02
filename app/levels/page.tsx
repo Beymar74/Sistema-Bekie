@@ -12,6 +12,7 @@ import {
   Cpu,
 } from "@phosphor-icons/react";
 import { LEVEL_2_STAGES } from "@/lib/nivel-1";
+import { LEVEL_0_STAGES } from "@/lib/levels";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const stagger = { visible: { transition: { staggerChildren: 0.1 } } };
@@ -21,16 +22,30 @@ const fadeUp = {
 };
 
 export default function LevelsPage() {
-  const unlockedIntermediateMission = useSyncExternalStore(
+  const unlockedBasicMission = useSyncExternalStore(
     (onStoreChange) => {
       if (typeof window === "undefined") return () => undefined;
-
       window.addEventListener("storage", onStoreChange);
       return () => window.removeEventListener("storage", onStoreChange);
     },
     () => {
       if (typeof window === "undefined") return 1;
+      const stored = Number(window.localStorage.getItem("bekie-level-0-progress") ?? "1");
+      const safeValue = Number.isNaN(stored) ? 1 : stored;
+      return Math.min(LEVEL_0_STAGES.length, Math.max(1, safeValue));
+    },
+    () => 1
+  );
+  const completedBasicMissions = Math.max(0, unlockedBasicMission - 1);
 
+  const unlockedIntermediateMission = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") return () => undefined;
+      window.addEventListener("storage", onStoreChange);
+      return () => window.removeEventListener("storage", onStoreChange);
+    },
+    () => {
+      if (typeof window === "undefined") return 1;
       const stored = Number(window.localStorage.getItem("bekie-level-2-progress") ?? "1");
       const safeValue = Number.isNaN(stored) ? 1 : stored;
       return Math.min(LEVEL_2_STAGES.length, Math.max(1, safeValue));
@@ -105,45 +120,48 @@ export default function LevelsPage() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <p className="text-xs text-gray-600 font-medium">Misiones (2/5)</p>
-                {["Movimiento basico", "Giro y avance", "Secuencia larga", "Laberinto simple", "Reto final"].map(
-                  (m, i) => (
+                <p className="text-xs text-gray-600 font-medium">
+                  Misiones ({completedBasicMissions}/{LEVEL_0_STAGES.length})
+                </p>
+                {LEVEL_0_STAGES.map((stage) => {
+                  const unlocked = stage.id <= unlockedBasicMission;
+                  const completed = stage.id < unlockedBasicMission;
+                  const inProgress = stage.id === unlockedBasicMission;
+                  return (
                     <div
-                      key={m}
+                      key={stage.id}
                       className="flex items-center gap-3 py-2 border-b border-gray-300 last:border-0"
                     >
                       <span
                         className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                          i < 2
+                          completed
                             ? "bg-emerald-400/15 text-emerald-600"
-                            : i === 2
+                            : inProgress
                             ? "bg-amber-400/15 text-amber-600"
                             : "bg-gray-200 text-gray-400"
                         }`}
                       >
-                        {i < 2 ? (
+                        {completed ? (
                           <CheckCircle size={12} weight="fill" />
-                        ) : i === 2 ? (
+                        ) : inProgress ? (
                           <Clock size={12} weight="fill" />
                         ) : (
                           <Lock size={11} weight="fill" />
                         )}
                       </span>
-                      <span
-                        className={`text-sm ${i <= 2 ? "text-gray-700" : "text-gray-500"}`}
-                      >
-                        {m}
+                      <span className={`text-sm ${unlocked ? "text-gray-700" : "text-gray-500"}`}>
+                        {stage.title}
                       </span>
                     </div>
-                  )
-                )}
+                  );
+                })}
               </div>
 
               <Link
-                href="/levels/1/mission"
+                href={`/levels/1/editor?mission=${unlockedBasicMission}`}
                 className="btn-press mt-auto flex items-center justify-center gap-2 bg-cyan-600 text-white font-semibold text-sm py-3 rounded-xl hover:bg-cyan-700 transition-colors"
               >
-                Continuar mision
+                {completedBasicMissions === 0 ? "Comenzar Nivel 0" : "Continuar mision"}
                 <ArrowRight size={15} weight="bold" />
               </Link>
             </div>
