@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import AppNav from "@/components/AppNav";
 import IntermediateLevelEditor from "@/components/IntermediateLevelEditor";
+import AdvancedLevelEditor from "@/components/AdvancedLevelEditor";
 import {
   ArrowLeft,
   CheckCircle,
@@ -17,17 +18,23 @@ import {
   X,
 } from "@phosphor-icons/react";
 import {
-  LEVEL_EDITORS as BASIC_LEVEL_EDITORS,
-  LEVEL_0_STAGES,
   type BlockType,
   type Dir,
   type LevelKey,
   type PaletteBlock,
 } from "@/lib/levels";
 import {
+  LEVEL_0_STAGES,
+  LEVEL_EDITORS as BASIC_LEVEL_EDITORS,
+} from "@/lib/nivel-0";
+import {
   LEVEL_2_STAGES,
   LEVEL_EDITORS as INTERMEDIATE_LEVEL_EDITORS,
 } from "@/lib/nivel-1";
+import {
+  LEVEL_3_STAGES,
+  LEVEL_EDITORS as ADVANCED_LEVEL_EDITORS,
+} from "@/lib/nivel-2";
 
 /* ─ Types ─ */
 type SimStatus = "idle" | "running" | "success" | "collision" | "oob" | "incomplete";
@@ -107,6 +114,26 @@ export default function EditorPage() {
   const levelKey = ((params.level as string) || "1") as LevelKey;
   const isIntermediate = levelKey === "2";
   const isBasic = levelKey === "1";
+  const isAdvanced = levelKey === "3";
+
+  // ── Nivel 3: delegate entirely to AdvancedLevelEditor ──
+  if (isAdvanced) {
+    const missionIndexRaw = Number(searchParams.get("mission") ?? "1");
+    const missionIndex = Math.min(
+      LEVEL_3_STAGES.length,
+      Math.max(1, Number.isNaN(missionIndexRaw) ? 1 : missionIndexRaw)
+    );
+    const stage = LEVEL_3_STAGES[missionIndex - 1] ?? LEVEL_3_STAGES[0];
+    const config = { ...ADVANCED_LEVEL_EDITORS["3"], grid: stage.grid };
+    return (
+      <AdvancedLevelEditor
+        key={missionIndex}
+        config={config}
+        stage={stage}
+        missionIndex={missionIndex}
+      />
+    );
+  }
   const config = isIntermediate
     ? INTERMEDIATE_LEVEL_EDITORS["2"]
     : BASIC_LEVEL_EDITORS["1"];

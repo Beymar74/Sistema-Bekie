@@ -90,6 +90,7 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   IF_OBS: "Si hay obstaculo",
   IF_OBS_ELSE: "Si hay obstaculo / Si no hay obstaculo",
   WHILE_GOAL: "Mientras no llegue",
+  REPEAT: "Repetir N veces",
 };
 
 const EMPTY_BLOCKS: BlockType[] = [];
