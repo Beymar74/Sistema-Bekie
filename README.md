@@ -234,7 +234,7 @@ BEKIE/
 
 ---
 
-## Módulos core (`lib/`)
+## Módulos core (`lib/`) carpeta
 
 ### `lib/levels.tsx` — Tipos y paletas globales
 
@@ -257,6 +257,7 @@ type BlockType =
   | "WAIT"         // Esperar (pausa)
   | "STOP"         // Obligatorio: finaliza el programa
   | "IF_OBS"       // Condicional: si hay obstáculo (Nivel 1)
+
   | "IF_OBS_ELSE"  // Condicional con rama else (Nivel 1)
   | "WHILE_GOAL"   // Bucle: repetir hasta meta (Nivel 1)
   | "REPEAT"       // Bucle for: repetir N veces (Nivel 2)
