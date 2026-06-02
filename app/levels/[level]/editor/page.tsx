@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import AppNav from "@/components/AppNav";
 import IntermediateLevelEditor from "@/components/IntermediateLevelEditor";
+import AdvancedLevelEditor from "@/components/AdvancedLevelEditor";
 import {
   ArrowLeft,
   CheckCircle,
@@ -27,6 +28,10 @@ import {
   LEVEL_2_STAGES,
   LEVEL_EDITORS as INTERMEDIATE_LEVEL_EDITORS,
 } from "@/lib/nivel-1";
+import {
+  LEVEL_3_STAGES,
+  LEVEL_EDITORS as ADVANCED_LEVEL_EDITORS,
+} from "@/lib/nivel-2";
 
 /* ─ Types ─ */
 type SimStatus = "idle" | "running" | "success" | "collision" | "oob" | "incomplete";
@@ -65,7 +70,6 @@ const MAX_LOOPS = 10;
 const SENSOR_STEP_CM = 20;
 let uid = 0;
 const genId = () => `b_${++uid}`;
-
 const formatDistance = (value: number | null) => (value === null ? "--" : `${value} cm`);
 
 export default function EditorPage() {
@@ -74,9 +78,31 @@ export default function EditorPage() {
   const searchParams = useSearchParams();
   const levelKey = ((params.level as string) || "1") as LevelKey;
   const isIntermediate = levelKey === "2";
+  const isAdvanced = levelKey === "3";
+
+  // ── Nivel 3: delegate entirely to AdvancedLevelEditor ──
+  if (isAdvanced) {
+    const missionIndexRaw = Number(searchParams.get("mission") ?? "1");
+    const missionIndex = Math.min(
+      LEVEL_3_STAGES.length,
+      Math.max(1, Number.isNaN(missionIndexRaw) ? 1 : missionIndexRaw)
+    );
+    const stage = LEVEL_3_STAGES[missionIndex - 1] ?? LEVEL_3_STAGES[0];
+    const config = { ...ADVANCED_LEVEL_EDITORS["3"], grid: stage.grid };
+    return (
+      <AdvancedLevelEditor
+        key={missionIndex}
+        config={config}
+        stage={stage}
+        missionIndex={missionIndex}
+      />
+    );
+  }
+
   const config = isIntermediate
     ? INTERMEDIATE_LEVEL_EDITORS["2"]
     : BASIC_LEVEL_EDITORS["1"];
+
   const missionIndexRaw = Number(searchParams.get("mission") ?? "1");
   const missionIndex = Math.min(
     LEVEL_2_STAGES.length,
@@ -86,6 +112,7 @@ export default function EditorPage() {
 
   const grid = config.grid;
   const gridSize = grid.length;
+
   const initialProgram = useCallback(
     (): Block[] => [{ ...config.palette[0], id: genId() }],
     [config.palette]
@@ -97,12 +124,7 @@ export default function EditorPage() {
       visited: new Set([`${config.start[0]}-${config.start[1]}`]),
       status: "idle",
       message: "",
-      sensors: {
-        front: null,
-        left: null,
-        right: null,
-        obstacleAhead: false,
-      },
+      sensors: { front: null, left: null, right: null, obstacleAhead: false },
     }),
     [config.start, config.startDir]
   );
@@ -111,6 +133,7 @@ export default function EditorPage() {
   const [sim, setSim] = useState<SimState>(() => initialSim());
   const [canSend, setCanSend] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const normalizeStepCount = useCallback((value: number) => {
     if (!Number.isFinite(value)) return 1;
     return Math.max(1, Math.min(9, Math.floor(value)));
@@ -132,7 +155,9 @@ export default function EditorPage() {
   };
 
   const removeBlock = (id: string) => {
-    setProgram((current) => current.filter((block, index) => index === 0 || block.id !== id));
+    setProgram((current) =>
+      current.filter((block, index) => index === 0 || block.id !== id)
+    );
   };
 
   const syncState = useCallback(
@@ -155,19 +180,13 @@ export default function EditorPage() {
       let row = pos[0];
       let col = pos[1];
       let cells = 0;
-
       while (true) {
         row += dr;
         col += dc;
         cells += 1;
-
-        if (row < 0 || row >= gridSize || col < 0 || col >= grid[row]?.length) {
+        if (row < 0 || row >= gridSize || col < 0 || col >= grid[row]?.length)
           return cells * SENSOR_STEP_CM;
-        }
-
-        if (grid[row][col] === 1) {
-          return cells * SENSOR_STEP_CM;
-        }
+        if (grid[row][col] === 1) return cells * SENSOR_STEP_CM;
       }
     },
     [grid, gridSize]
@@ -210,16 +229,22 @@ export default function EditorPage() {
     setCanSend(false);
     syncState(pos, dir, visited, sensors, "running", "Simulacion iniciada.");
 
-    const finish = (status: Exclude<SimStatus, "running" | "idle">, message: string) => {
+    const finish = (
+      status: Exclude<SimStatus, "running" | "idle">,
+      message: string
+    ) => {
       syncState(pos, dir, visited, sensors, status, message);
       if (status === "success") setCanSend(true);
     };
 
-    const moveRobot = (movementDir: Dir, collisionMessage: string, oobMessage: string) => {
+    const moveRobot = (
+      movementDir: Dir,
+      collisionMessage: string,
+      oobMessage: string
+    ) => {
       const [dr, dc] = DIR_DELTA[movementDir];
       const next: [number, number] = [pos[0] + dr, pos[1] + dc];
       const cell = getCell(next);
-
       if (cell === null) {
         pos = next;
         visited.add(`${next[0]}-${next[1]}`);
@@ -227,7 +252,6 @@ export default function EditorPage() {
         finish("oob", oobMessage);
         return true;
       }
-
       if (cell === 1) {
         pos = next;
         visited.add(`${next[0]}-${next[1]}`);
@@ -235,7 +259,6 @@ export default function EditorPage() {
         finish("collision", collisionMessage);
         return true;
       }
-
       pos = next;
       visited.add(`${next[0]}-${next[1]}`);
       sensors = readSensors(pos, dir);
@@ -266,19 +289,27 @@ export default function EditorPage() {
       switch (block.type as BlockType) {
         case "FORWARD":
           for (let step = 0; step < normalizeStepCount(block.steps ?? 1); step += 1) {
-            if (moveRobot(dir, "El robot choco con un obstaculo.", "El robot salio del area permitida.")) {
+            if (
+              moveRobot(
+                dir,
+                "El robot choco con un obstaculo.",
+                "El robot salio del area permitida."
+              )
+            )
               return;
-            }
           }
           break;
         case "BACKWARD": {
           const backDir = ((dir + 2) % 4) as Dir;
           for (let step = 0; step < normalizeStepCount(block.steps ?? 1); step += 1) {
             if (
-              moveRobot(backDir, "El robot choco retrocediendo.", "El robot salio del area permitida al retroceder.")
-            ) {
+              moveRobot(
+                backDir,
+                "El robot choco retrocediendo.",
+                "El robot salio del area al retroceder."
+              )
+            )
               return;
-            }
           }
           break;
         }
@@ -302,38 +333,17 @@ export default function EditorPage() {
         case "IF_OBS_ELSE": {
           if (sensors.obstacleAhead) {
             skipAfterBranch = 1;
-            syncState(
-              pos,
-              dir,
-              visited,
-              sensors,
-              "running",
-              "Obstaculo detectado: se ejecuta la respuesta del obstaculo."
-            );
+            syncState(pos, dir, visited, sensors, "running", "Obstaculo detectado: rama obstaculo.");
           } else {
             stepIdx += 1;
-            syncState(
-              pos,
-              dir,
-              visited,
-              sensors,
-              "running",
-              "Sin obstaculo: se ejecuta la respuesta libre."
-            );
+            syncState(pos, dir, visited, sensors, "running", "Sin obstaculo: rama libre.");
           }
           scheduleNext();
           return;
         }
         case "WHILE_GOAL": {
           loopStartIndex = stepIdx;
-          syncState(
-            pos,
-            dir,
-            visited,
-            sensors,
-            "running",
-            "Comienza el bucle: se repetira lo que esta debajo hasta llegar a la meta."
-          );
+          syncState(pos, dir, visited, sensors, "running", "Bucle activo: se repetira hasta llegar a la meta.");
           scheduleNext();
           return;
         }
@@ -355,22 +365,18 @@ export default function EditorPage() {
         skipAfterBranch = 0;
       }
 
-      if (loopStartIndex !== null && stepIdx === loopExitIndex && getCell(pos) !== 3) {
+      if (
+        loopStartIndex !== null &&
+        stepIdx === loopExitIndex &&
+        getCell(pos) !== 3
+      ) {
         loopCount += 1;
         if (loopCount > MAX_LOOPS) {
-          finish("incomplete", "El bucle alcanzo el limite permitido sin llegar a la meta.");
+          finish("incomplete", "El bucle alcanzo el limite sin llegar a la meta.");
           return;
         }
-
         stepIdx = loopStartIndex;
-        syncState(
-          pos,
-          dir,
-          visited,
-          sensors,
-          "running",
-          `Repitiendo el cuerpo del while (${loopCount}/${MAX_LOOPS}).`
-        );
+        syncState(pos, dir, visited, sensors, "running", `Repitiendo bucle (${loopCount}/${MAX_LOOPS}).`);
         scheduleNext();
         return;
       }
@@ -380,27 +386,17 @@ export default function EditorPage() {
           finish("success", "Simulacion exitosa. El robot llego a la meta.");
           return;
         }
-
         if (loopStartIndex !== null) {
           loopCount += 1;
           if (loopCount > MAX_LOOPS) {
-            finish("incomplete", "El bucle alcanzo el limite permitido sin llegar a la meta.");
+            finish("incomplete", "El bucle alcanzo el limite sin llegar a la meta.");
             return;
           }
-
           stepIdx = loopStartIndex;
-          syncState(
-            pos,
-            dir,
-            visited,
-            sensors,
-            "running",
-            `Repitiendo el cuerpo del while (${loopCount}/${MAX_LOOPS}).`
-          );
+          syncState(pos, dir, visited, sensors, "running", `Repitiendo bucle (${loopCount}/${MAX_LOOPS}).`);
           scheduleNext();
           return;
         }
-
         finish("incomplete", "El robot no llego a la meta. Revisa tu programa.");
         return;
       }
@@ -424,6 +420,7 @@ export default function EditorPage() {
     setCanSend(false);
   };
 
+  // ── Nivel 2: delegate to IntermediateLevelEditor ──
   if (isIntermediate) {
     return (
       <IntermediateLevelEditor
@@ -435,6 +432,7 @@ export default function EditorPage() {
     );
   }
 
+  // ── Nivel 0 (basic): inline editor ──
   const statusInfo = {
     idle: { color: "text-gray-500", icon: null, label: "Sin probar" },
     running: {
@@ -442,13 +440,27 @@ export default function EditorPage() {
       icon: <span className="inline-block w-2 h-2 rounded-full bg-cyan-600 animate-pulse" />,
       label: "Ejecutando...",
     },
-    success: { color: "text-emerald-600", icon: <CheckCircle size={14} weight="fill" className="text-emerald-600" />, label: "Exito" },
-    collision: { color: "text-red-600", icon: <Warning size={14} weight="fill" className="text-red-600" />, label: "Colision" },
-    oob: { color: "text-amber-600", icon: <Warning size={14} weight="fill" className="text-amber-600" />, label: "Fuera del area" },
-    incomplete: { color: "text-amber-600", icon: <Warning size={14} weight="fill" className="text-amber-600" />, label: "Incompleto" },
+    success: {
+      color: "text-emerald-600",
+      icon: <CheckCircle size={14} weight="fill" className="text-emerald-600" />,
+      label: "Exito",
+    },
+    collision: {
+      color: "text-red-600",
+      icon: <Warning size={14} weight="fill" className="text-red-600" />,
+      label: "Colision",
+    },
+    oob: {
+      color: "text-amber-600",
+      icon: <Warning size={14} weight="fill" className="text-amber-600" />,
+      label: "Fuera del area",
+    },
+    incomplete: {
+      color: "text-amber-600",
+      icon: <Warning size={14} weight="fill" className="text-amber-600" />,
+      label: "Incompleto",
+    },
   }[sim.status];
-
-  const cellSize = gridSize;
 
   return (
     <div className="min-h-[100dvh] bg-white flex flex-col">
@@ -514,13 +526,7 @@ export default function EditorPage() {
               Bloques
             </p>
             {config.helperText && (
-              <div
-                className={`mb-3 rounded-lg border px-3 py-2 text-[11px] leading-relaxed ${
-                  isIntermediate
-                    ? "border-violet-200 bg-violet-50 text-violet-700"
-                    : "border-cyan-200 bg-cyan-50 text-cyan-700"
-                }`}
-              >
+              <div className="mb-3 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-[11px] leading-relaxed text-cyan-700">
                 {config.helperText}
               </div>
             )}
@@ -542,7 +548,7 @@ export default function EditorPage() {
 
         {/* Program editor */}
         <div className="flex-1 flex flex-col min-w-0 border-r border-gray-300">
-          <div className="p-3 border-b border-gray-300/60 flex items-center justify-between">
+          <div className="p-3 border-b border-gray-300/60">
             <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
               Programa ({program.length}/25)
             </p>
@@ -579,28 +585,26 @@ export default function EditorPage() {
           </div>
         </div>
 
-        {/* 2D simulator */}
+        {/* 2D Simulator */}
         <div className="w-[280px] lg:w-[320px] flex-shrink-0 flex flex-col">
           <div className="p-3 border-b border-gray-300/60">
             <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
               Simulador 2D
             </p>
           </div>
-
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             <div
               className="grid gap-1"
-              style={{ gridTemplateColumns: `repeat(${cellSize}, 1fr)` }}
+              style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
             >
-              {Array.from({ length: cellSize }).map((_, row) =>
-                Array.from({ length: cellSize }).map((_, col) => {
+              {Array.from({ length: gridSize }).map((_, row) =>
+                Array.from({ length: gridSize }).map((_, col) => {
                   const cell = grid[row][col];
                   const isRobot = sim.pos[0] === row && sim.pos[1] === col;
                   const isVisited = sim.visited.has(`${row}-${col}`) && !isRobot;
                   const isObstacle = cell === 1;
                   const isGoal = cell === 3;
                   const isStart = cell === 2 && !isRobot;
-
                   return (
                     <div
                       key={`${row}-${col}`}
@@ -623,7 +627,11 @@ export default function EditorPage() {
                         <span className="text-emerald-700 text-[9px] font-bold">META</span>
                       )}
                       {isObstacle && <span className="text-gray-300">■</span>}
-                      {isStart && <span className="text-gray-500 text-sm font-bold">{DIR_ARROW[config.startDir]}</span>}
+                      {isStart && (
+                        <span className="text-gray-500 text-sm font-bold">
+                          {DIR_ARROW[config.startDir]}
+                        </span>
+                      )}
                     </div>
                   );
                 })
@@ -654,51 +662,6 @@ export default function EditorPage() {
               </div>
             </div>
 
-            {isIntermediate && (
-              <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-3">
-                  Lecturas de sensores
-                </p>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    {
-                      label: "Frontal",
-                      value: formatDistance(sim.sensors.front),
-                      accent: "text-violet-600",
-                      border: "border-violet-200",
-                    },
-                    {
-                      label: "Izquierdo",
-                      value: formatDistance(sim.sensors.left),
-                      accent: "text-amber-600",
-                      border: "border-amber-200",
-                    },
-                    {
-                      label: "Derecho",
-                      value: formatDistance(sim.sensors.right),
-                      accent: "text-cyan-600",
-                      border: "border-cyan-200",
-                    },
-                  ].map((sensor) => (
-                    <div key={sensor.label} className={`rounded-lg border ${sensor.border} bg-gray-50 p-2`}>
-                      <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
-                        {sensor.label}
-                      </p>
-                      <p className={`text-sm font-bold font-mono ${sensor.accent}`}>
-                        {sensor.value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-3 text-[11px] text-gray-500 font-mono flex items-center justify-between gap-2">
-                  <span>Via frontal</span>
-                  <span className={sim.sensors.obstacleAhead ? "text-red-600" : "text-emerald-600"}>
-                    {sim.sensors.obstacleAhead ? "Obstaculo detectado" : "Libre"}
-                  </span>
-                </div>
-              </div>
-            )}
-
             <div className="flex flex-col gap-1.5 text-[11px] font-mono text-gray-500">
               <p className="text-[10px] uppercase tracking-wider mb-1">Leyenda</p>
               {[
@@ -717,7 +680,7 @@ export default function EditorPage() {
             <div className="text-[11px] font-mono text-gray-500">
               <span className="text-[10px] uppercase tracking-wider">Direccion: </span>
               <span className="text-cyan-600">
-                {DIR_ARROW[sim.dir]} {['Derecha', 'Abajo', 'Izquierda', 'Arriba'][sim.dir]}
+                {DIR_ARROW[sim.dir]} {["Derecha", "Abajo", "Izquierda", "Arriba"][sim.dir]}
               </span>
             </div>
           </div>
