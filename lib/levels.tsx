@@ -1,3 +1,5 @@
+"use client";
+
 import type { ReactNode } from "react";
 import {
   ArrowClockwise,
@@ -10,7 +12,7 @@ import {
   Timer,
 } from "@phosphor-icons/react";
 
-export type LevelKey = "1" | "2";
+export type LevelKey = "1" | "2" | "3";
 export type Dir = 0 | 1 | 2 | 3;
 export type BlockType =
   | "INIT"
@@ -22,7 +24,9 @@ export type BlockType =
   | "STOP"
   | "IF_OBS"
   | "IF_OBS_ELSE"
-  | "WHILE_GOAL";
+  | "WHILE_GOAL"
+  | "WHILE_OBS"
+  | "FOR_REPEAT";
 
 export interface PaletteBlock {
   type: BlockType;
@@ -37,7 +41,7 @@ export interface MissionContent {
   title: string;
   badge: string;
   icon: ReactNode;
-  accent: "cyan" | "violet";
+  accent: "cyan" | "violet" | "indigo";
   objective: string;
   instructions: string[];
   victory: string;
@@ -50,7 +54,7 @@ export interface EditorLevelContent {
   title: string;
   level: string;
   levelSlug: string;
-  accent: "cyan" | "violet";
+  accent: "cyan" | "violet" | "indigo";
   grid: number[][];
   start: [number, number];
   startDir: Dir;
@@ -183,4 +187,4 @@ export const LEVEL_EDITORS: Record<"1", EditorLevelContent> = {
   },
 };
 
-export const LEVEL_ORDER: LevelKey[] = ["1", "2"];
+export const LEVEL_ORDER: LevelKey[] = ["1", "2", "3"];
