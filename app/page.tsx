@@ -14,6 +14,7 @@ import {
   GraduationCap,
   Sparkle,
   CaretRight,
+  Repeat,
 } from "@phosphor-icons/react";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -33,7 +34,7 @@ const staggerContainer = {
   visible: { transition: { staggerChildren: 0.1 } },
 };
 
-/* ── Mini simulator preview for the hero ── */
+/* ── Mini simulator preview ── */
 const PREVIEW_GRID = [
   [2, 0, 0, 0, 0, 0],
   [0, 0, 1, 0, 0, 0],
@@ -125,7 +126,7 @@ function SimulatorPreview() {
           </div>
 
           <div className="flex gap-2">
-            {["Avanzar", "Girar der.", "Detener"].map((label) => (
+            {["Avanzar", "For N=3", "While obs"].map((label) => (
               <span
                 key={label}
                 className="text-[11px] font-mono bg-gray-200 text-gray-700 px-2 py-1 rounded-md border border-gray-300/60"
@@ -185,7 +186,8 @@ export default function HomePage() {
               className="text-lg text-gray-600 leading-relaxed max-w-[52ch]"
             >
               Construye secuencias con bloques visuales, prueba en el simulador
-              2D y ejecuta tu programa en hardware real.
+              2D y ejecuta tu programa en hardware real. Tres niveles progresivos:
+              secuencial, condicional y bucles avanzados.
             </motion.p>
 
             <motion.div variants={fadeUp} className="flex items-center gap-3">
@@ -248,7 +250,7 @@ export default function HomePage() {
               {
                 icon: <Code size={22} weight="duotone" />,
                 title: "Bloques visuales",
-                desc: "Sin escribir codigo. Arrastra bloques de movimiento y logica para construir tu programa.",
+                desc: "Sin escribir codigo. Arrastra bloques de movimiento, condicionales y bucles para construir tu programa.",
                 accent: "text-cyan-600",
                 bg: "bg-cyan-600/5 border-cyan-600/10",
               },
@@ -333,11 +335,7 @@ export default function HomePage() {
               <motion.div key={step.num} variants={fadeUp} className="relative">
                 {i < 2 && (
                   <div className="hidden md:block absolute top-8 left-[calc(100%+12px)] w-8">
-                    <CaretRight
-                      size={20}
-                      className="text-zinc-700"
-                      weight="bold"
-                    />
+                    <CaretRight size={20} className="text-zinc-700" weight="bold" />
                   </div>
                 )}
                 <div className="flex flex-col gap-4">
@@ -361,7 +359,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Levels */}
+      {/* Levels – now 3 */}
       <section id="niveles" className="py-28">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
@@ -372,10 +370,10 @@ export default function HomePage() {
             className="mb-12"
           >
             <h2 className="text-4xl font-bold tracking-tight text-gray-900">
-              Dos niveles de aprendizaje
+              Tres niveles de aprendizaje
             </h2>
             <p className="mt-3 text-gray-600">
-              Avanza de lo secuencial a lo condicional, paso a paso.
+              De lo secuencial a bucles avanzados, paso a paso.
             </p>
           </motion.div>
 
@@ -384,8 +382,9 @@ export default function HomePage() {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, amount: 0.15 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-5"
+            className="grid grid-cols-1 md:grid-cols-3 gap-5"
           >
+            {/* Nivel 0 */}
             <motion.div
               variants={fadeUp}
               className="card-hover relative p-7 rounded-2xl border border-gray-300/60 bg-gray-100/60 flex flex-col gap-6"
@@ -420,7 +419,10 @@ export default function HomePage() {
                     key={feat}
                     className="flex items-center gap-2 text-sm text-gray-600"
                   >
-                    <ArrowRight size={13} className="text-cyan-600 flex-shrink-0" />
+                    <ArrowRight
+                      size={13}
+                      className="text-cyan-600 flex-shrink-0"
+                    />
                     {feat}
                   </li>
                 ))}
@@ -434,6 +436,7 @@ export default function HomePage() {
               </Link>
             </motion.div>
 
+            {/* Nivel 1 */}
             <motion.div
               variants={fadeUp}
               className="card-hover relative p-7 rounded-2xl border border-violet-200 bg-violet-50 flex flex-col gap-6"
@@ -469,7 +472,10 @@ export default function HomePage() {
                     key={feat}
                     className="flex items-center gap-2 text-sm text-gray-600"
                   >
-                    <ArrowRight size={13} className="text-violet-600 flex-shrink-0" />
+                    <ArrowRight
+                      size={13}
+                      className="text-violet-600 flex-shrink-0"
+                    />
                     {feat}
                   </li>
                 ))}
@@ -482,11 +488,65 @@ export default function HomePage() {
                 <ArrowRight size={15} weight="bold" />
               </Link>
             </motion.div>
+
+            {/* Nivel 2 */}
+            <motion.div
+              variants={fadeUp}
+              className="card-hover relative p-7 rounded-2xl border border-indigo-200 bg-indigo-50 flex flex-col gap-6"
+            >
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-800/10 to-transparent pointer-events-none" />
+              <div>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-xs font-mono text-indigo-600 uppercase tracking-wider">
+                      Nivel 2
+                    </span>
+                    <h3 className="mt-1 text-2xl font-bold text-gray-800">
+                      Avanzado
+                    </h3>
+                  </div>
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-emerald-600 bg-emerald-600/10 px-2.5 py-1 rounded-full">
+                    <CheckCircle size={12} weight="fill" />
+                    Disponible
+                  </span>
+                </div>
+                <p className="mt-3 text-gray-600 text-sm leading-relaxed">
+                  Bucles avanzados. Usa While para evadir obstaculos
+                  automaticamente y For para repetir acciones un numero exacto
+                  de veces.
+                </p>
+              </div>
+              <ul className="flex flex-col gap-2">
+                {[
+                  "For N veces: repeticion exacta",
+                  "While hay obstaculo: evasion automatica",
+                  "Combinar if/else + While + For",
+                ].map((feat) => (
+                  <li
+                    key={feat}
+                    className="flex items-center gap-2 text-sm text-gray-600"
+                  >
+                    <ArrowRight
+                      size={13}
+                      className="text-indigo-600 flex-shrink-0"
+                    />
+                    {feat}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/levels/3/mission"
+                className="btn-press mt-auto inline-flex items-center justify-center gap-2 bg-indigo-600 text-white font-semibold text-sm px-5 py-2.5 rounded-lg hover:bg-indigo-700 transition-colors w-fit"
+              >
+                Entrar
+                <ArrowRight size={15} weight="bold" />
+              </Link>
+            </motion.div>
           </motion.div>
         </div>
       </section>
 
-      {/* Benefits - bold statement */}
+      {/* Benefits */}
       <section className="py-28 border-t border-gray-300/50">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
@@ -512,17 +572,35 @@ export default function HomePage() {
           >
             {[
               {
-                icon: <GraduationCap size={24} weight="duotone" className="text-cyan-600" />,
+                icon: (
+                  <GraduationCap
+                    size={24}
+                    weight="duotone"
+                    className="text-cyan-600"
+                  />
+                ),
                 title: "Aprendizaje practico",
                 desc: "Cada concepto se aplica directamente en el robot. No hay teoria sin ejecucion.",
               },
               {
-                icon: <Sparkle size={24} weight="duotone" className="text-amber-600" />,
+                icon: (
+                  <Sparkle
+                    size={24}
+                    weight="duotone"
+                    className="text-amber-600"
+                  />
+                ),
                 title: "Misiones y puntuacion",
                 desc: "Cada nivel tiene misiones con puntaje, tiempo y contador de intentos.",
               },
               {
-                icon: <WifiHigh size={24} weight="duotone" className="text-violet-600" />,
+                icon: (
+                  <WifiHigh
+                    size={24}
+                    weight="duotone"
+                    className="text-violet-600"
+                  />
+                ),
                 title: "Hardware ESP32 real",
                 desc: "Comunicacion WiFi en tiempo real con el rover. Sin cables, sin simulaciones indefinidas.",
               },
@@ -543,8 +621,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Team / Credits */}
-      <section id="equipo" className="py-24 bg-gray-100/20 border-t border-gray-300/40">
+      {/* Team */}
+      <section
+        id="equipo"
+        className="py-24 bg-gray-100/20 border-t border-gray-300/40"
+      >
         <div className="max-w-3xl mx-auto px-6 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -572,9 +653,21 @@ export default function HomePage() {
             className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-6"
           >
             {[
-              { label: "Institucion", value: "Universidad Escuela Militar", sub: "de Ingenieria" },
-              { label: "Integrantes", value: "Beymar Cruz • Kiara Pino • Evelyn Burgoa", sub: "" },
-              { label: "Docente", value: "Lic. Grover M.", sub: "Magueño Gordillo" },
+              {
+                label: "Institucion",
+                value: "Universidad Escuela Militar",
+                sub: "de Ingenieria",
+              },
+              {
+                label: "Integrantes",
+                value: "Beymar Cruz • Kiara Pino • Evelyn Burgoa",
+                sub: "",
+              },
+              {
+                label: "Docente",
+                value: "Lic. Grover M.",
+                sub: "Magueño Gordillo",
+              },
             ].map((item) => (
               <motion.div
                 key={item.label}
@@ -587,7 +680,9 @@ export default function HomePage() {
                 <p className="mt-2 text-sm font-semibold text-gray-900">
                   {item.value}
                 </p>
-                {item.sub && <p className="mt-0.5 text-xs text-gray-600">{item.sub}</p>}
+                {item.sub && (
+                  <p className="mt-0.5 text-xs text-gray-600">{item.sub}</p>
+                )}
               </motion.div>
             ))}
           </motion.div>

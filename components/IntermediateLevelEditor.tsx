@@ -79,7 +79,7 @@ interface TutorialStep {
   blocksToPress?: BlockType[];
 }
 
-const BLOCK_LABELS: Record<BlockType, string> = {
+const BLOCK_LABELS: Partial<Record<BlockType, string>> = {
   INIT: "Iniciar mision",
   FORWARD: "Avanzar",
   BACKWARD: "Retroceder",
