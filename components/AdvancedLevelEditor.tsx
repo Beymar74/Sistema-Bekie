@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
@@ -16,6 +24,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { LEVEL_3_STAGES } from "@/lib/nivel-2";
+import { unlockMissionAfterComplete } from "@/lib/progress";
 import {
   type BlockType,
   type Dir,
@@ -93,47 +102,48 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   REPEAT: "Repetir N veces",
 };
 
+const BLOCK_DRAG_MIME = "application/x-bekie-block";
 const EMPTY_BLOCKS: BlockType[] = [];
 
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
     title: "PASO 1 / ASISTENTE BEKIE",
-    text: "Tu programa ya empieza con Iniciar mision. Ahora pulsa Repetir N veces desde el panel izquierdo. Este bloque repetirá las instrucciones de movimiento en cada iteración.",
+    text: "Tu programa ya empieza con Iniciar mision. Ahora arrastra Repetir N veces desde el panel izquierdo. Este bloque repetirá las instrucciones de movimiento en cada iteración.",
     target: "palette",
     lockText: "Agrega el bloque Repetir N veces para continuar.",
     blocksToPress: ["REPEAT"],
   },
   {
     title: "PASO 2 / ASISTENTE BEKIE",
-    text: "Ahora pulsa Avanzar para colocarlo dentro del bucle como primer paso de la escalera.",
+    text: "Ahora arrastra Avanzar para colocarlo dentro del bucle como primer paso de la escalera.",
     target: "palette",
     lockText: "Agrega Avanzar dentro del bucle para continuar.",
     blocksToPress: ["FORWARD"],
   },
   {
     title: "PASO 3 / ASISTENTE BEKIE",
-    text: "Ahora pulsa Girar derecha para añadir el giro dentro del bucle.",
+    text: "Ahora arrastra Girar derecha para añadir el giro dentro del bucle.",
     target: "palette",
     lockText: "Agrega Girar derecha dentro del bucle para continuar.",
     blocksToPress: ["TURN_RIGHT"],
   },
   {
     title: "PASO 4 / ASISTENTE BEKIE",
-    text: "Agrega otro bloque Avanzar dentro del bucle para avanzar en el siguiente eje.",
+    text: "Arrastra otro bloque Avanzar dentro del bucle para avanzar en el siguiente eje.",
     target: "palette",
     lockText: "Agrega Avanzar dentro del bucle para continuar.",
     blocksToPress: ["FORWARD"],
   },
   {
     title: "PASO 5 / ASISTENTE BEKIE",
-    text: "Agrega Girar izquierda dentro del bucle para orientar el robot hacia el siguiente escalón.",
+    text: "Arrastra Girar izquierda dentro del bucle para orientar el robot hacia el siguiente escalón.",
     target: "palette",
     lockText: "Agrega Girar izquierda dentro del bucle para continuar.",
     blocksToPress: ["TURN_LEFT"],
   },
   {
     title: "PASO 6 / ASISTENTE BEKIE",
-    text: "Ahora agrega Detener al final del programa (fuera del bucle) para finalizar sobre la meta.",
+    text: "Ahora arrastra Detener al final del programa (fuera del bucle) para finalizar sobre la meta.",
     target: "palette",
     lockText: "Agrega Detener al final para continuar.",
     blocksToPress: ["STOP"],
@@ -176,6 +186,7 @@ export default function AdvancedLevelEditor({
   const [tutorialVisible, setTutorialVisible] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [scenarioIntroVisible, setScenarioIntroVisible] = useState(true);
+  const [isProgramDropActive, setIsProgramDropActive] = useState(false);
   const [targetRect, setTargetRect] = useState<{
     top: number;
     left: number;
@@ -187,6 +198,34 @@ export default function AdvancedLevelEditor({
   const programRef = useRef<HTMLDivElement | null>(null);
   const compileRef = useRef<HTMLButtonElement | null>(null);
   const loadRef = useRef<HTMLButtonElement | null>(null);
+
+  const getPaletteBlock = useCallback(
+    (type: BlockType) => config.palette.find((block) => block.type === type) ?? null,
+    [config.palette]
+  );
+
+  const handlePaletteDragStart = (type: BlockType) => (event: DragEvent<HTMLButtonElement>) => {
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData(BLOCK_DRAG_MIME, type);
+  };
+
+  const handleProgramDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsProgramDropActive(true);
+  };
+
+  const handleProgramDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsProgramDropActive(false);
+
+    const type = event.dataTransfer.getData(BLOCK_DRAG_MIME) as BlockType;
+    if (!type) return;
+
+    const def = getPaletteBlock(type);
+    if (!def) return;
+    addBlock(def);
+  };
 
   const updateTargetRect = useCallback(() => {
     if (!showTutorial || !tutorialVisible) {
@@ -311,6 +350,8 @@ export default function AdvancedLevelEditor({
     () => new Set(tutorialBlocksToPress),
     [tutorialBlocksToPress]
   );
+  const isProgramDropGuideActive =
+    showTutorial && tutorialVisible && currentTutorialStep?.target === "palette";
 
   const canAdvanceTutorial = useMemo(() => {
     if (!currentTutorialStep) return false;
@@ -955,18 +996,11 @@ export default function AdvancedLevelEditor({
 
   const goToRobot = () => {
     if (compilerResult.status === "success") {
-      const nextUnlocked = Math.min(LEVEL_3_STAGES.length, missionIndex + 1);
-      const currentStored =
-        typeof window !== "undefined"
-          ? Number(window.localStorage.getItem("bekie-level-3-progress") ?? "1")
-          : 1;
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(
-          "bekie-level-3-progress",
-          String(Math.max(currentStored, nextUnlocked))
-        );
-      }
+      unlockMissionAfterComplete(
+        "bekie-level-3-progress",
+        missionIndex,
+        LEVEL_3_STAGES.length
+      );
       if (showTutorial) {
         setTutorialVisible(false);
       }
@@ -1132,16 +1166,19 @@ export default function AdvancedLevelEditor({
                    <button
                      id={`btn-palette-${def.type.toLowerCase()}`}
                      key={`${def.type}-${i}`}
-                     onClick={() => addBlock(def)}
+                     type="button"
+                     draggable
+                     onDragStart={handlePaletteDragStart(def.type)}
+                     onDragEnd={() => setIsProgramDropActive(false)}
                      className={`block-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-all ${
                        isPaletteHighlighted
                          ? "border-indigo-500 ring-4 ring-indigo-500 ring-offset-1 bg-indigo-50 animate-pulse text-indigo-900 z-50 relative scale-[1.03] shadow-md"
                          : def.colorClass
-                     } hover:brightness-105`}
+                     } hover:brightness-105 cursor-grab active:cursor-grabbing`}
                    >
                     <span className="flex-shrink-0">{def.icon}</span>
                     <span className="text-xs font-mono flex-1">{def.label}</span>
-                    <Plus size={11} className="opacity-40 flex-shrink-0" />
+                    <span className="text-[10px] font-mono opacity-60 flex-shrink-0">Arrastra</span>
                   </button>
                 );
               })}
@@ -1150,19 +1187,53 @@ export default function AdvancedLevelEditor({
         </div>
 
         {/* Program Editor Panel */}
-        <div ref={programRef} className="flex-1 flex flex-col min-w-0 border-r border-gray-300 bg-gray-50/50">
+        <div
+          ref={programRef}
+          className={`flex-1 flex flex-col min-w-0 border-r border-gray-300 bg-gray-50/50 transition-all ${
+            isProgramDropGuideActive
+              ? "bg-indigo-50/30 ring-4 ring-inset ring-indigo-400/85 shadow-[0_0_0_1px_rgba(99,102,241,0.22),0_0_42px_rgba(99,102,241,0.32)]"
+              : ""
+          }`}
+        >
           <div className="p-3 border-b border-gray-300/60 flex items-center justify-between">
             <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
               Programa ({program.length}/25)
             </p>
+            {isProgramDropGuideActive && (
+              <span className="text-[10px] font-mono uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full">
+                Suelta aquí
+              </span>
+            )}
           </div>
-          <div className="flex-1 overflow-y-auto p-4 max-w-[560px] mx-auto w-full">
-            <div className="flex flex-col gap-2">
+          <div
+            className={`relative flex-1 overflow-y-auto p-4 max-w-[560px] mx-auto w-full transition-all ${
+              isProgramDropActive ? "bg-indigo-50/70" : ""
+            } ${
+              isProgramDropGuideActive
+                ? "bg-indigo-50/60 ring-4 ring-inset ring-indigo-400/70 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.14)]"
+                : ""
+            }`}
+            onDragOver={handleProgramDragOver}
+            onDrop={handleProgramDrop}
+          >
+            {isProgramDropGuideActive && (
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(191,219,254,0.26),transparent_58%)] animate-pulse" />
+            )}
+            {isProgramDropGuideActive && (
+              <div className="pointer-events-none absolute inset-2 rounded-xl border border-indigo-300/90 bg-indigo-100/20 shadow-[0_0_0_1px_rgba(165,180,252,0.18),0_0_38px_rgba(99,102,241,0.34)]" />
+            )}
+            {isProgramDropGuideActive && (
+              <div className="relative z-10 mb-2 flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-[10px] font-mono text-indigo-700 uppercase tracking-wider shadow-[0_0_24px_rgba(99,102,241,0.18)]">
+                <span>Arrastra y suelta los bloques aquí</span>
+                <span>Zona activa</span>
+              </div>
+            )}
+            <div className="relative z-10 flex flex-col gap-2 min-h-full">
               {renderProgramItems(programView, false, true)}
               {program.length < 2 && (
-                <div className="flex items-center justify-center gap-2 py-8 px-4 text-xs text-gray-400 border border-dashed border-gray-300 bg-white rounded-xl">
+                <div className="flex items-center justify-center gap-2 py-8 px-4 text-xs text-gray-400 border border-dashed border-gray-300 bg-white/85 rounded-xl shadow-sm">
                   <Plus size={14} />
-                  Agrega bloques desde el panel izquierdo
+                  Arrastra bloques desde el panel izquierdo
                 </div>
               )}
             </div>

@@ -5,10 +5,11 @@ export type ProgressKey =
   | "bekie-level-2-progress"
   | "bekie-level-3-progress";
 
+const PROGRESS_VERSION = "v2";
 const COMPLETED_SUFFIX = ":completed";
 
 function completedKey(key: ProgressKey) {
-  return `${key}${COMPLETED_SUFFIX}`;
+  return `${key}:${PROGRESS_VERSION}${COMPLETED_SUFFIX}`;
 }
 
 export function readMissionProgress(key: ProgressKey, maxMissions: number): number {
@@ -17,16 +18,13 @@ export function readMissionProgress(key: ProgressKey, maxMissions: number): numb
   }
 
   const currentCompleted = window.localStorage.getItem(completedKey(key));
-  if (currentCompleted !== null) {
-    const parsed = Number(currentCompleted);
-    const safe = Number.isNaN(parsed) ? 0 : parsed;
-    return Math.min(maxMissions, Math.max(0, safe));
+  if (currentCompleted === null) {
+    return 0;
   }
 
-  const legacyUnlocked = Number(window.localStorage.getItem(key) ?? "0");
-  const legacySafe = Number.isNaN(legacyUnlocked) ? 0 : legacyUnlocked;
-  const migratedCompleted = Math.max(0, legacySafe - 1);
-  return Math.min(maxMissions, migratedCompleted);
+  const parsed = Number(currentCompleted);
+  const safe = Number.isNaN(parsed) ? 0 : parsed;
+  return Math.min(maxMissions, Math.max(0, safe));
 }
 
 export function unlockMissionAfterComplete(

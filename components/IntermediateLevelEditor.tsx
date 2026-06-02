@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
@@ -92,38 +100,40 @@ const BLOCK_LABELS: Partial<Record<BlockType, string>> = {
   REPEAT: "Repetir N veces",
 };
 
+const BLOCK_DRAG_MIME = "application/x-bekie-block";
+
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
     title: "PASO 1 / ASISTENTE BEKIE",
-    text: "Tu programa ya empieza con Iniciar mision. Ahora pulsa Si hay obstaculo / Si no hay obstaculo para crear la decision con dos ramas.",
+    text: "Tu programa ya empieza con Iniciar mision. Ahora arrastra Si hay obstaculo / Si no hay obstaculo para crear la decision con dos ramas.",
     target: "palette",
     lockText: "Agrega el bloque de decision para continuar.",
     blocksToPress: ["IF_OBS_ELSE"],
   },
   {
     title: "PASO 2 / ASISTENTE BEKIE",
-    text: "Pulsa Girar derecha. Este bloque va en la rama del obstaculo: indica que el robot debe girar cuando el camino este bloqueado.",
+    text: "Arrastra Girar derecha. Este bloque va en la rama del obstaculo: indica que el robot debe girar cuando el camino este bloqueado.",
     target: "palette",
     lockText: "Agrega Girar derecha en la rama del obstaculo para continuar.",
     blocksToPress: ["TURN_RIGHT"],
   },
   {
     title: "PASO 3 / ASISTENTE BEKIE",
-    text: "Pulsa Avanzar. Este bloque va en la rama libre (Si no hay obstaculo): el robot avanza una casilla cuando el camino esta despejado.",
+    text: "Arrastra Avanzar. Este bloque va en la rama libre (Si no hay obstaculo): el robot avanza una casilla cuando el camino esta despejado.",
     target: "palette",
     lockText: "Agrega Avanzar en la rama libre para continuar.",
     blocksToPress: ["FORWARD"],
   },
   {
     title: "PASO 4 / ASISTENTE BEKIE",
-    text: "Pulsa Avanzar otra vez. Este avance va fuera de la decision, despues de las dos ramas, para completar el recorrido hasta la meta.",
+    text: "Arrastra Avanzar otra vez. Este avance va fuera de la decision, despues de las dos ramas, para completar el recorrido hasta la meta.",
     target: "palette",
     lockText: "Agrega un Avanzar fuera de la decision para continuar.",
     blocksToPress: ["FORWARD"],
   },
   {
     title: "PASO 5 / ASISTENTE BEKIE",
-    text: "Pulsa Detener al final del programa para cerrar la secuencia correctamente.",
+    text: "Arrastra Detener al final del programa para cerrar la secuencia correctamente.",
     target: "palette",
     lockText: "Agrega Detener al final para continuar.",
     blocksToPress: ["STOP"],
@@ -166,6 +176,7 @@ export default function IntermediateLevelEditor({
   const [tutorialVisible, setTutorialVisible] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [scenarioIntroVisible, setScenarioIntroVisible] = useState(true);
+  const [isProgramDropActive, setIsProgramDropActive] = useState(false);
   const [targetRect, setTargetRect] = useState<{
     top: number;
     left: number;
@@ -181,6 +192,34 @@ export default function IntermediateLevelEditor({
     if (!Number.isFinite(value)) return 1;
     return Math.max(1, Math.min(9, Math.floor(value)));
   }, []);
+
+  const getPaletteBlock = useCallback(
+    (type: BlockType) => config.palette.find((block) => block.type === type) ?? null,
+    [config.palette]
+  );
+
+  const handlePaletteDragStart = (type: BlockType) => (event: DragEvent<HTMLButtonElement>) => {
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData(BLOCK_DRAG_MIME, type);
+  };
+
+  const handleProgramDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsProgramDropActive(true);
+  };
+
+  const handleProgramDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsProgramDropActive(false);
+
+    const type = event.dataTransfer.getData(BLOCK_DRAG_MIME) as BlockType;
+    if (!type) return;
+
+    const def = getPaletteBlock(type);
+    if (!def) return;
+    addBlock(def);
+  };
 
   const addBlock = (def: PaletteBlock) => {
     if (program.length >= 25) return;
@@ -235,6 +274,8 @@ export default function IntermediateLevelEditor({
   };
 
   const currentTutorialStep = showTutorial && tutorialVisible ? TUTORIAL_STEPS[tutorialStep] : null;
+  const isProgramDropGuideActive =
+    showTutorial && tutorialVisible && currentTutorialStep?.target === "palette";
   const canAdvanceTutorial = useMemo(() => {
     if (!currentTutorialStep) return false;
 
@@ -1188,16 +1229,19 @@ export default function IntermediateLevelEditor({
                   <button
                     id={`btn-palette-${def.type.toLowerCase()}`}
                     key={`${def.type}-${i}`}
-                    onClick={() => addBlock(def)}
+                    type="button"
+                    draggable
+                    onDragStart={handlePaletteDragStart(def.type)}
+                    onDragEnd={() => setIsProgramDropActive(false)}
                     className={`block-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-all ${
                       isPaletteHighlighted
                         ? "border-indigo-500 ring-4 ring-indigo-500 ring-offset-1 bg-indigo-50 animate-pulse text-indigo-900 z-50 relative scale-[1.03] shadow-md"
                         : def.colorClass
-                    } hover:brightness-105`}
+                    } hover:brightness-105 cursor-grab active:cursor-grabbing`}
                   >
                     <span className="flex-shrink-0">{def.icon}</span>
                     <span className="text-xs font-mono flex-1">{def.label}</span>
-                    <Plus size={11} className="opacity-40 flex-shrink-0" />
+                    <span className="text-[10px] font-mono opacity-60 flex-shrink-0">Arrastra</span>
                   </button>
                 );
               })}
@@ -1207,7 +1251,11 @@ export default function IntermediateLevelEditor({
 
         <div
           ref={programRef}
-          className="flex-1 flex flex-col min-w-0 border-r border-gray-300"
+          className={`flex-1 flex flex-col min-w-0 border-r border-gray-300 transition-all ${
+            isProgramDropGuideActive
+              ? "bg-violet-50/30 ring-4 ring-inset ring-violet-400/85 shadow-[0_0_0_1px_rgba(139,92,246,0.22),0_0_42px_rgba(139,92,246,0.32)]"
+              : ""
+          }`}
         >
           <div className="p-3 border-b border-gray-300/60 flex items-center justify-between">
             <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
@@ -1217,13 +1265,35 @@ export default function IntermediateLevelEditor({
               Mision {missionIndex}/5
             </span>
           </div>
-          <div className="flex-1 overflow-y-auto p-3">
-            <div className="flex flex-col gap-1.5">
+          <div
+            className={`relative flex-1 overflow-y-auto p-3 transition-all ${
+              isProgramDropActive ? "bg-violet-50/70" : ""
+            } ${
+              isProgramDropGuideActive
+                ? "bg-violet-50/60 ring-4 ring-inset ring-violet-400/70 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.14)]"
+                : ""
+            }`}
+            onDragOver={handleProgramDragOver}
+            onDrop={handleProgramDrop}
+          >
+            {isProgramDropGuideActive && (
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(196,181,253,0.26),transparent_58%)] animate-pulse" />
+            )}
+            {isProgramDropGuideActive && (
+              <div className="pointer-events-none absolute inset-2 rounded-xl border border-violet-300/90 bg-violet-100/20 shadow-[0_0_0_1px_rgba(167,139,250,0.18),0_0_38px_rgba(139,92,246,0.34)]" />
+            )}
+            {isProgramDropGuideActive && (
+              <div className="relative z-10 mb-2 flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-mono text-violet-700 uppercase tracking-wider shadow-[0_0_24px_rgba(139,92,246,0.18)]">
+                <span>Suelta los bloques aquí</span>
+                <span>Zona activa</span>
+              </div>
+            )}
+            <div className="relative z-10 flex flex-col gap-1.5 min-h-full">
               {renderProgramItems(programView)}
               {program.length < 2 && (
-                <div className="flex items-center gap-2 py-3 px-3 text-xs text-gray-500 border border-dashed border-gray-300 rounded-lg">
+                <div className="flex items-center gap-2 py-3 px-3 text-xs text-gray-500 border border-dashed border-gray-300 rounded-lg bg-white/80 shadow-sm">
                   <Plus size={13} />
-                  Agrega bloques desde el panel izquierdo
+                  Arrastra bloques desde el panel izquierdo
                 </div>
               )}
             </div>
