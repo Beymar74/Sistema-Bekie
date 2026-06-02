@@ -14,8 +14,10 @@ import {
   Target,
   Repeat,
 } from "@phosphor-icons/react";
+import { LEVEL_0_STAGES } from "@/lib/nivel-0";
 import { LEVEL_2_STAGES } from "@/lib/nivel-1";
 import { LEVEL_3_STAGES } from "@/lib/nivel-2";
+import { readMissionProgress, subscribeMissionProgress } from "@/lib/progress";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const stagger = { visible: { transition: { staggerChildren: 0.09 } } };
@@ -44,46 +46,29 @@ function ProgressBar({ value }: { value: number }) {
 
 export default function DashboardPage() {
   const userName = "Beymar";
-  const level0Missions = 2;
-  const totalLevel0 = 5;
+  const unlockedLevel0 = useSyncExternalStore(
+    subscribeMissionProgress,
+    () => readMissionProgress("bekie-level-0-progress", LEVEL_0_STAGES.length),
+    () => 0
+  );
+  const level0Missions = unlockedLevel0;
+  const totalLevel0 = LEVEL_0_STAGES.length;
 
   /* ── Nivel 1 progress ── */
   const unlockedLevel1 = useSyncExternalStore(
-    (onChange) => {
-      if (typeof window === "undefined") return () => undefined;
-      window.addEventListener("storage", onChange);
-      return () => window.removeEventListener("storage", onChange);
-    },
-    () => {
-      if (typeof window === "undefined") return 1;
-      const stored = Number(
-        window.localStorage.getItem("bekie-level-2-progress") ?? "1"
-      );
-      const safe = Number.isNaN(stored) ? 1 : stored;
-      return Math.min(LEVEL_2_STAGES.length, Math.max(1, safe));
-    },
-    () => 1
+    subscribeMissionProgress,
+    () => readMissionProgress("bekie-level-2-progress", LEVEL_2_STAGES.length),
+    () => 0
   );
-  const completedLevel1 = Math.max(0, unlockedLevel1 - 1);
+  const completedLevel1 = unlockedLevel1;
 
   /* ── Nivel 2 progress ── */
   const unlockedLevel2 = useSyncExternalStore(
-    (onChange) => {
-      if (typeof window === "undefined") return () => undefined;
-      window.addEventListener("storage", onChange);
-      return () => window.removeEventListener("storage", onChange);
-    },
-    () => {
-      if (typeof window === "undefined") return 1;
-      const stored = Number(
-        window.localStorage.getItem("bekie-level-3-progress") ?? "1"
-      );
-      const safe = Number.isNaN(stored) ? 1 : stored;
-      return Math.min(LEVEL_3_STAGES.length, Math.max(1, safe));
-    },
-    () => 1
+    subscribeMissionProgress,
+    () => readMissionProgress("bekie-level-3-progress", LEVEL_3_STAGES.length),
+    () => 0
   );
-  const completedLevel2 = Math.max(0, unlockedLevel2 - 1);
+  const completedLevel2 = unlockedLevel2;
 
   const totalMissions =
     totalLevel0 + LEVEL_2_STAGES.length + LEVEL_3_STAGES.length;
@@ -212,7 +197,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <div className="flex justify-between text-xs text-gray-600 mb-2">
-                <span>Misiones</span>
+                <span>Misiones completadas</span>
                 <span className="font-mono">
                   {level0Missions}/{totalLevel0}
                 </span>
@@ -260,7 +245,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <div className="flex justify-between text-xs text-gray-600 mb-2">
-                <span>Misiones</span>
+                <span>Misiones completadas</span>
                 <span className="font-mono">
                   {completedLevel1}/{LEVEL_2_STAGES.length}
                 </span>
@@ -304,7 +289,7 @@ export default function DashboardPage() {
             </p>
             <div>
               <div className="flex justify-between text-xs text-gray-600 mb-2">
-                <span>Misiones</span>
+                <span>Misiones completadas</span>
                 <span className="font-mono">
                   {completedLevel2}/{LEVEL_3_STAGES.length}
                 </span>

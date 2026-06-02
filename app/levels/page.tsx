@@ -15,6 +15,7 @@ import {
 import { LEVEL_2_STAGES } from "@/lib/nivel-1";
 import { LEVEL_0_STAGES } from "@/lib/nivel-0";
 import { LEVEL_3_STAGES } from "@/lib/nivel-2";
+import { readMissionProgress, subscribeMissionProgress } from "@/lib/progress";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const stagger = { visible: { transition: { staggerChildren: 0.1 } } };
@@ -24,53 +25,23 @@ const fadeUp = {
 };
 
 export default function LevelsPage() {
-  const unlockedBasicMission = useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof window === "undefined") return () => undefined;
-      window.addEventListener("storage", onStoreChange);
-      return () => window.removeEventListener("storage", onStoreChange);
-    },
-    () => {
-      if (typeof window === "undefined") return 1;
-      const stored = Number(window.localStorage.getItem("bekie-level-0-progress") ?? "1");
-      const safeValue = Number.isNaN(stored) ? 1 : stored;
-      return Math.min(LEVEL_0_STAGES.length, Math.max(1, safeValue));
-    },
-    () => 1
+  const completedBasicMissions = useSyncExternalStore(
+    subscribeMissionProgress,
+    () => readMissionProgress("bekie-level-0-progress", LEVEL_0_STAGES.length),
+    () => 0
   );
-  const completedBasicMissions = Math.max(0, unlockedBasicMission - 1);
 
-  const unlockedIntermediateMission = useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof window === "undefined") return () => undefined;
-      window.addEventListener("storage", onStoreChange);
-      return () => window.removeEventListener("storage", onStoreChange);
-    },
-    () => {
-      if (typeof window === "undefined") return 1;
-      const stored = Number(window.localStorage.getItem("bekie-level-2-progress") ?? "1");
-      const safeValue = Number.isNaN(stored) ? 1 : stored;
-      return Math.min(LEVEL_2_STAGES.length, Math.max(1, safeValue));
-    },
-    () => 1
+  const completedIntermediateMissions = useSyncExternalStore(
+    subscribeMissionProgress,
+    () => readMissionProgress("bekie-level-2-progress", LEVEL_2_STAGES.length),
+    () => 0
   );
-  const completedIntermediateMissions = Math.max(0, unlockedIntermediateMission - 1);
 
-  const unlockedAdvancedMission = useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof window === "undefined") return () => undefined;
-      window.addEventListener("storage", onStoreChange);
-      return () => window.removeEventListener("storage", onStoreChange);
-    },
-    () => {
-      if (typeof window === "undefined") return 1;
-      const stored = Number(window.localStorage.getItem("bekie-level-3-progress") ?? "1");
-      const safeValue = Number.isNaN(stored) ? 1 : stored;
-      return Math.min(LEVEL_3_STAGES.length, Math.max(1, safeValue));
-    },
-    () => 1
+  const completedAdvancedMissions = useSyncExternalStore(
+    subscribeMissionProgress,
+    () => readMissionProgress("bekie-level-3-progress", LEVEL_3_STAGES.length),
+    () => 0
   );
-  const completedAdvancedMissions = Math.max(0, unlockedAdvancedMission - 1);
 
   return (
     <div className="min-h-[100dvh] bg-white flex flex-col">
@@ -139,12 +110,12 @@ export default function LevelsPage() {
 
               <div className="flex flex-col gap-2">
                 <p className="text-xs text-gray-600 font-medium">
-                  Misiones ({completedBasicMissions}/{LEVEL_0_STAGES.length})
+                  Misiones completadas ({completedBasicMissions}/{LEVEL_0_STAGES.length})
                 </p>
                 {LEVEL_0_STAGES.map((stage) => {
-                  const unlocked = stage.id <= unlockedBasicMission;
-                  const completed = stage.id < unlockedBasicMission;
-                  const inProgress = stage.id === unlockedBasicMission;
+                  const completed = stage.id <= completedBasicMissions;
+                  const inProgress = stage.id === completedBasicMissions + 1;
+                  const unlocked = completed || inProgress;
                   return (
                     <div
                       key={stage.id}
@@ -176,7 +147,10 @@ export default function LevelsPage() {
               </div>
 
               <Link
-                href={`/levels/1/editor?mission=${unlockedBasicMission}`}
+                href={`/levels/1/editor?mission=${Math.min(
+                  completedBasicMissions + 1,
+                  LEVEL_0_STAGES.length
+                )}`}
                 className="btn-press mt-auto flex items-center justify-center gap-2 bg-cyan-600 text-white font-semibold text-sm py-3 rounded-xl hover:bg-cyan-700 transition-colors"
               >
                 {completedBasicMissions === 0 ? "Comenzar Nivel 0" : "Continuar mision"}
@@ -207,8 +181,8 @@ export default function LevelsPage() {
               </div>
 
               <p className="text-sm text-gray-600 leading-relaxed">
-                Condicionales y bucles. El robot detecta el entorno internamente, pero aquí tú
-                programas una sola estructura if/else para reaccionar frente a obstáculos,
+                Condicionales if/else. El robot detecta el entorno internamente, pero aquí tú
+                programas una sola estructura con dos ramas para reaccionar frente a obstáculos,
                 caminos libres y desvíos.
               </p>
 
@@ -219,7 +193,7 @@ export default function LevelsPage() {
                     "Usar if/else",
                     "Aprovechar caminos libres",
                     "Encadenar decisiones",
-                    "Repetir rutas con bucles",
+                    "Rutas largas con avances",
                   ].map(
                     (item) => (
                       <span
@@ -235,10 +209,10 @@ export default function LevelsPage() {
 
               <div className="flex flex-col gap-2">
                 <p className="text-xs text-gray-600 font-medium">
-                  Misiones ({completedIntermediateMissions}/{LEVEL_2_STAGES.length})
+                  Misiones completadas ({completedIntermediateMissions}/{LEVEL_2_STAGES.length})
                 </p>
                 {LEVEL_2_STAGES.map((stage) => {
-                  const unlocked = stage.id <= unlockedIntermediateMission;
+                  const unlocked = stage.id <= completedIntermediateMissions + 1;
 
                   return (
                     <div
@@ -324,10 +298,10 @@ export default function LevelsPage() {
 
               <div className="flex flex-col gap-2">
                 <p className="text-xs text-gray-600 font-medium">
-                  Misiones ({completedAdvancedMissions}/{LEVEL_3_STAGES.length})
+                  Misiones completadas ({completedAdvancedMissions}/{LEVEL_3_STAGES.length})
                 </p>
                 {LEVEL_3_STAGES.map((stage) => {
-                  const unlocked = stage.id <= unlockedAdvancedMission;
+                  const unlocked = stage.id <= completedAdvancedMissions + 1;
 
                   return (
                     <div

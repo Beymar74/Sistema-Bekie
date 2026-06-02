@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import AppNav from "@/components/AppNav";
@@ -23,6 +23,7 @@ import {
   type LevelKey,
   type PaletteBlock,
 } from "@/lib/levels";
+import { unlockMissionAfterComplete } from "@/lib/progress";
 import {
   LEVEL_0_STAGES,
   LEVEL_EDITORS as BASIC_LEVEL_EDITORS,
@@ -71,6 +72,7 @@ const DIR_ARROW = ["→", "↓", "←", "↑"];
 const MAX_STEPS = 220;
 const MAX_LOOPS = 10;
 const SENSOR_STEP_CM = 20;
+const BLOCK_DRAG_MIME = "application/x-bekie-block";
 let uid = 0;
 const genId = () => `b_${++uid}`;
 
@@ -186,6 +188,7 @@ export default function EditorPage() {
   const [program, setProgram] = useState<Block[]>(() => initialProgram());
   const [sim, setSim] = useState<SimState>(() => initialSim());
   const [canSend, setCanSend] = useState(false);
+  const [isProgramDropActive, setIsProgramDropActive] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const normalizeStepCount = useCallback((value: number) => {
     if (!Number.isFinite(value)) return 1;
@@ -205,6 +208,34 @@ export default function EditorPage() {
       ...current,
       { ...def, id: genId(), ...(def.type === "FORWARD" ? { steps: 1 } : {}) },
     ]);
+  };
+
+  const getPaletteBlock = useCallback(
+    (type: BlockType) => config.palette.find((block) => block.type === type) ?? null,
+    [config.palette]
+  );
+
+  const handlePaletteDragStart = (type: BlockType) => (event: DragEvent<HTMLButtonElement>) => {
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData(BLOCK_DRAG_MIME, type);
+  };
+
+  const handleProgramDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsProgramDropActive(true);
+  };
+
+  const handleProgramDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsProgramDropActive(false);
+
+    const type = event.dataTransfer.getData(BLOCK_DRAG_MIME) as BlockType;
+    if (!type) return;
+
+    const def = getPaletteBlock(type);
+    if (!def) return;
+    addBlock(def);
   };
 
   const removeBlock = (id: string) => {
@@ -300,12 +331,11 @@ export default function EditorPage() {
       if (status === "success") {
         setCanSend(true);
         if (isBasic && typeof window !== "undefined") {
-          const key = "bekie-level-0-progress";
-          const stored = Number(window.localStorage.getItem(key) ?? "1");
-          const current = Number.isNaN(stored) ? 1 : stored;
-          const next = Math.min(LEVEL_0_STAGES.length, Math.max(current, missionIndex + 1));
-          window.localStorage.setItem(key, String(next));
-          window.dispatchEvent(new Event("storage"));
+          unlockMissionAfterComplete(
+            "bekie-level-0-progress",
+            missionIndex,
+            LEVEL_0_STAGES.length
+          );
         }
       }
     };
@@ -521,10 +551,21 @@ export default function EditorPage() {
   };
 
   if (isIntermediate) {
+    const intermediateStart: [number, number] = (() => {
+      for (let row = 0; row < stage.grid.length; row += 1) {
+        for (let col = 0; col < stage.grid[row].length; col += 1) {
+          if (stage.grid[row][col] === 2) {
+            return [row, col];
+          }
+        }
+      }
+      return config.start;
+    })();
+
     return (
       <IntermediateLevelEditor
         key={missionIndex}
-        config={config}
+        config={{ ...config, grid: stage.grid, start: intermediateStart }}
         stage={stage}
         missionIndex={missionIndex}
       />
@@ -624,12 +665,15 @@ export default function EditorPage() {
               {config.palette.map((def, i) => (
                 <button
                   key={`${def.type}-${i}`}
-                  onClick={() => addBlock(def)}
-                  className={`block-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-all ${def.colorClass} hover:brightness-125`}
+                  type="button"
+                  draggable
+                  onDragStart={handlePaletteDragStart(def.type)}
+                  onDragEnd={() => setIsProgramDropActive(false)}
+                  className={`block-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-all ${def.colorClass} hover:brightness-125 cursor-grab active:cursor-grabbing`}
                 >
                   <span className="flex-shrink-0">{def.icon}</span>
                   <span className="text-xs font-mono">{def.label}</span>
-                  <Plus size={11} className="ml-auto opacity-40" />
+                  <span className="ml-auto text-[10px] font-mono opacity-60">Arrastra</span>
                 </button>
               ))}
             </div>
@@ -643,8 +687,14 @@ export default function EditorPage() {
               Programa ({program.length}/25)
             </p>
           </div>
-          <div className="flex-1 overflow-y-auto p-3">
-            <div className="flex flex-col gap-1.5">
+          <div
+            className={`flex-1 overflow-y-auto p-3 transition-colors ${
+              isProgramDropActive ? "bg-cyan-50/70" : ""
+            }`}
+            onDragOver={handleProgramDragOver}
+            onDrop={handleProgramDrop}
+          >
+            <div className="flex flex-col gap-1.5 min-h-full">
               {program.map((block, i) => (
                 <div
                   key={block.id}
@@ -668,7 +718,7 @@ export default function EditorPage() {
               {program.length < 2 && (
                 <div className="flex items-center gap-2 py-3 px-3 text-xs text-gray-500 border border-dashed border-gray-300 rounded-lg">
                   <Plus size={13} />
-                  Agrega bloques desde el panel izquierdo
+                  Arrastra bloques desde el panel izquierdo
                 </div>
               )}
             </div>

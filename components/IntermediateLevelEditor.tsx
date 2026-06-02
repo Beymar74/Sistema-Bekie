@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
@@ -16,6 +24,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { LEVEL_2_STAGES } from "@/lib/nivel-1";
+import { saveRobotLoadPayload } from "@/lib/progress";
 import {
   type BlockType,
   type Dir,
@@ -23,8 +32,6 @@ import {
   type MissionStage,
   type PaletteBlock,
 } from "@/lib/levels";
-
-const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 type CompilerStatus = "idle" | "success" | "error";
 type TutorialTarget = "palette" | "program" | "compile" | "load";
@@ -93,32 +100,53 @@ const BLOCK_LABELS: Partial<Record<BlockType, string>> = {
   REPEAT: "Repetir N veces",
 };
 
-const EMPTY_BLOCKS: BlockType[] = [];
+const BLOCK_DRAG_MIME = "application/x-bekie-block";
 
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
-    title: "Paso 1",
-    text: "Tu programa ya empieza con Iniciar mision. Ahora pulsa Si hay obstaculo / Si no hay obstaculo para abrir la decision y completar sus dos respuestas. Cuando lo hagas, avanzaremos automaticamente al siguiente paso.",
+    title: "PASO 1 / ASISTENTE BEKIE",
+    text: "Tu programa ya empieza con Iniciar mision. Ahora arrastra Si hay obstaculo / Si no hay obstaculo para crear la decision con dos ramas.",
     target: "palette",
-    lockText: "Agrega la respuesta del obstaculo y la respuesta libre para desbloquear el siguiente paso.",
+    lockText: "Agrega el bloque de decision para continuar.",
     blocksToPress: ["IF_OBS_ELSE"],
   },
   {
-    title: "Paso 2",
-    text: "Ahora pulsa Girar derecha para la respuesta del obstaculo y Avanzar para la respuesta libre. Luego agrega un Avanzar simple fuera de la decision para llegar a la meta y termina con Detener para cerrar el programa correctamente. Al terminar, pasaremos solos al siguiente paso.",
+    title: "PASO 2 / ASISTENTE BEKIE",
+    text: "Arrastra Girar derecha. Este bloque va en la rama del obstaculo: indica que el robot debe girar cuando el camino este bloqueado.",
     target: "palette",
-    lockText: "Agrega la respuesta libre con Avanzar, el Avanzar final sin numero y Detener para continuar.",
-    blocksToPress: ["TURN_RIGHT", "FORWARD", "STOP"],
+    lockText: "Agrega Girar derecha en la rama del obstaculo para continuar.",
+    blocksToPress: ["TURN_RIGHT"],
   },
   {
-    title: "Paso 3",
-    text: "Cuando termines, pulsa Compilar. Si algo queda mal, se marcara en rojo. Si todo esta bien, el tutorial seguira automaticamente.",
+    title: "PASO 3 / ASISTENTE BEKIE",
+    text: "Arrastra Avanzar. Este bloque va en la rama libre (Si no hay obstaculo): el robot avanza una casilla cuando el camino esta despejado.",
+    target: "palette",
+    lockText: "Agrega Avanzar en la rama libre para continuar.",
+    blocksToPress: ["FORWARD"],
+  },
+  {
+    title: "PASO 4 / ASISTENTE BEKIE",
+    text: "Arrastra Avanzar otra vez. Este avance va fuera de la decision, despues de las dos ramas, para completar el recorrido hasta la meta.",
+    target: "palette",
+    lockText: "Agrega un Avanzar fuera de la decision para continuar.",
+    blocksToPress: ["FORWARD"],
+  },
+  {
+    title: "PASO 5 / ASISTENTE BEKIE",
+    text: "Arrastra Detener al final del programa para cerrar la secuencia correctamente.",
+    target: "palette",
+    lockText: "Agrega Detener al final para continuar.",
+    blocksToPress: ["STOP"],
+  },
+  {
+    title: "PASO 6 / ASISTENTE BEKIE",
+    text: "Pulsa Compilar para simular el recorrido. Si algo queda mal, los bloques se marcaran en rojo. Si todo esta bien, avanzaremos al siguiente paso.",
     target: "compile",
-    lockText: "Compila la secuencia correcta para avanzar al último paso.",
+    lockText: "Compila la secuencia correcta para continuar.",
   },
   {
-    title: "Paso 4",
-    text: "Si la compilacion queda correcta, pulsa Cargar para enviar el programa.",
+    title: "PASO 7 / ASISTENTE BEKIE",
+    text: "Compilacion exitosa. Pulsa Cargar para abrir la ventana de conexion, ver cada instruccion enviada y el tiempo de recorrido.",
     target: "load",
     lockText: "Primero necesitas una compilacion exitosa para cargar el programa.",
   },
@@ -148,7 +176,8 @@ export default function IntermediateLevelEditor({
   const [tutorialVisible, setTutorialVisible] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [scenarioIntroVisible, setScenarioIntroVisible] = useState(true);
-  const [focusRect, setFocusRect] = useState<{
+  const [isProgramDropActive, setIsProgramDropActive] = useState(false);
+  const [targetRect, setTargetRect] = useState<{
     top: number;
     left: number;
     width: number;
@@ -163,6 +192,34 @@ export default function IntermediateLevelEditor({
     if (!Number.isFinite(value)) return 1;
     return Math.max(1, Math.min(9, Math.floor(value)));
   }, []);
+
+  const getPaletteBlock = useCallback(
+    (type: BlockType) => config.palette.find((block) => block.type === type) ?? null,
+    [config.palette]
+  );
+
+  const handlePaletteDragStart = (type: BlockType) => (event: DragEvent<HTMLButtonElement>) => {
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData(BLOCK_DRAG_MIME, type);
+  };
+
+  const handleProgramDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsProgramDropActive(true);
+  };
+
+  const handleProgramDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsProgramDropActive(false);
+
+    const type = event.dataTransfer.getData(BLOCK_DRAG_MIME) as BlockType;
+    if (!type) return;
+
+    const def = getPaletteBlock(type);
+    if (!def) return;
+    addBlock(def);
+  };
 
   const addBlock = (def: PaletteBlock) => {
     if (program.length >= 25) return;
@@ -217,11 +274,8 @@ export default function IntermediateLevelEditor({
   };
 
   const currentTutorialStep = showTutorial && tutorialVisible ? TUTORIAL_STEPS[tutorialStep] : null;
-  const tutorialBlocksToPress = currentTutorialStep?.blocksToPress ?? EMPTY_BLOCKS;
-  const tutorialHighlightBlocks = useMemo(
-    () => new Set(tutorialBlocksToPress),
-    [tutorialBlocksToPress]
-  );
+  const isProgramDropGuideActive =
+    showTutorial && tutorialVisible && currentTutorialStep?.target === "palette";
   const canAdvanceTutorial = useMemo(() => {
     if (!currentTutorialStep) return false;
 
@@ -234,6 +288,30 @@ export default function IntermediateLevelEditor({
         );
       case 1:
         return (
+          program.length === 3 &&
+          program[0]?.type === "INIT" &&
+          program[1]?.type === "IF_OBS_ELSE" &&
+          program[2]?.type === "TURN_RIGHT"
+        );
+      case 2:
+        return (
+          program.length === 4 &&
+          program[0]?.type === "INIT" &&
+          program[1]?.type === "IF_OBS_ELSE" &&
+          program[2]?.type === "TURN_RIGHT" &&
+          program[3]?.type === "FORWARD"
+        );
+      case 3:
+        return (
+          program.length === 5 &&
+          program[0]?.type === "INIT" &&
+          program[1]?.type === "IF_OBS_ELSE" &&
+          program[2]?.type === "TURN_RIGHT" &&
+          program[3]?.type === "FORWARD" &&
+          program[4]?.type === "FORWARD"
+        );
+      case 4:
+        return (
           program.length === 6 &&
           program[0]?.type === "INIT" &&
           program[1]?.type === "IF_OBS_ELSE" &&
@@ -242,9 +320,9 @@ export default function IntermediateLevelEditor({
           program[4]?.type === "FORWARD" &&
           program[5]?.type === "STOP"
         );
-      case 2:
+      case 5:
         return compilerResult.status === "success";
-      case 3:
+      case 6:
         return true;
       default:
         return false;
@@ -257,55 +335,93 @@ export default function IntermediateLevelEditor({
 
     const timer = window.setTimeout(() => {
       setTutorialStep((current) => Math.min(current + 1, TUTORIAL_STEPS.length - 1));
-    }, 300);
+    }, 650);
 
     return () => window.clearTimeout(timer);
   }, [canAdvanceTutorial, currentTutorialStep, showTutorial, tutorialStep, tutorialVisible]);
 
-  const updateFocusRect = useCallback(() => {
-    if (!currentTutorialStep || typeof window === "undefined") {
+  const updateTargetRect = useCallback(() => {
+    if (!showTutorial || !tutorialVisible) {
+      setTargetRect(null);
       return;
     }
 
-    const targetRefs = {
-      palette: paletteRef,
-      program: programRef,
-      compile: compileRef,
-      load: loadRef,
-    };
-
-    const element = targetRefs[currentTutorialStep.target].current;
-    if (!element) {
-      setFocusRect(null);
-      return;
+    let selector = "";
+    if (tutorialStep === 0) {
+      selector = "#btn-palette-if_obs_else";
+    } else if (tutorialStep === 1) {
+      selector = "#btn-palette-turn_right";
+    } else if (tutorialStep === 2 || tutorialStep === 3) {
+      selector = "#btn-palette-forward";
+    } else if (tutorialStep === 4) {
+      selector = "#btn-palette-stop";
+    } else if (tutorialStep === 5) {
+      selector = "#btn-compile";
+    } else if (tutorialStep === 6) {
+      selector = "#btn-load";
     }
 
-    const rect = element.getBoundingClientRect();
-    const padding = currentTutorialStep.target === "compile" || currentTutorialStep.target === "load" ? 10 : 12;
+    if (selector) {
+      const el = document.querySelector(selector);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setTargetRect({
+          top: r.top,
+          left: r.left,
+          width: r.width,
+          height: r.height,
+        });
+        return;
+      }
+    }
 
-    setFocusRect({
-      top: Math.max(12, rect.top - padding),
-      left: Math.max(12, rect.left - padding),
-      width: Math.min(window.innerWidth - 24, rect.width + padding * 2),
-      height: Math.min(window.innerHeight - 24, rect.height + padding * 2),
-    });
-  }, [currentTutorialStep]);
+    setTargetRect(null);
+  }, [showTutorial, tutorialStep, tutorialVisible]);
 
   useEffect(() => {
-    if (!currentTutorialStep) return;
+    updateTargetRect();
+    const t = window.setTimeout(updateTargetRect, 120);
 
-    const frame = window.requestAnimationFrame(updateFocusRect);
-    const handleUpdate = () => updateFocusRect();
+    let interval: number | undefined;
+    if (showTutorial && tutorialVisible) {
+      interval = window.setInterval(updateTargetRect, 250);
+    }
 
-    window.addEventListener("resize", handleUpdate);
-    window.addEventListener("scroll", handleUpdate, true);
-
+    window.addEventListener("resize", updateTargetRect);
+    window.addEventListener("scroll", updateTargetRect, true);
     return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", handleUpdate);
-      window.removeEventListener("scroll", handleUpdate, true);
+      window.clearTimeout(t);
+      if (interval) window.clearInterval(interval);
+      window.removeEventListener("resize", updateTargetRect);
+      window.removeEventListener("scroll", updateTargetRect, true);
     };
-  }, [currentTutorialStep, updateFocusRect]);
+  }, [updateTargetRect, tutorialStep, program, tutorialVisible, showTutorial]);
+
+  const cardPlacementStyle = useMemo(() => {
+    if (!targetRect) {
+      return { bottom: "32px", left: "32px" };
+    }
+
+    const W = typeof window !== "undefined" ? window.innerWidth : 1200;
+    const H = typeof window !== "undefined" ? window.innerHeight : 800;
+
+    const isTargetInLeft = targetRect.left < W / 2;
+    const isTargetInBottom = targetRect.top > H / 2;
+
+    if (isTargetInLeft && isTargetInBottom) {
+      return { bottom: "32px", right: "32px" };
+    }
+
+    if (isTargetInLeft && !isTargetInBottom) {
+      return { bottom: "32px", right: "32px" };
+    }
+
+    if (!isTargetInLeft && !isTargetInBottom) {
+      return { bottom: "32px", left: "32px" };
+    }
+
+    return { bottom: "32px", right: "32px" };
+  }, [targetRect]);
 
   const canCompile = program.length > 1;
   const programView = useMemo(() => {
@@ -382,7 +498,7 @@ export default function IntermediateLevelEditor({
   ) => {
     const isHighlighted = compilerResult.highlightIndexes.includes(index);
     const nested = options?.nested ?? false;
-    const showSteps = (options?.allowSteps ?? nested) && block.type === "FORWARD";
+    const showSteps = block.type === "FORWARD";
 
     return (
       <div
@@ -642,14 +758,10 @@ export default function IntermediateLevelEditor({
       pushIssue("Cada mision de este nivel necesita exactamente un bloque Si hay obstaculo / Si no hay obstaculo.");
     }
 
-    const whileIndexInProgram = program.findIndex((block) => block.type === "WHILE_GOAL");
-
-    if (missionIndex >= 4 && countBlocks("WHILE_GOAL") !== 1) {
-      pushIssue("Esta mision necesita exactamente un bloque Mientras no llegue.");
-    }
-
-    if (missionIndex < 4 && countBlocks("WHILE_GOAL") > 0) {
-      pushIssue("En esta mision todavia no necesitas Mientras no llegue.");
+    if (countBlocks("WHILE_GOAL") > 0) {
+      pushIssue(
+        "En este nivel solo se usa Si hay obstaculo / Si no hay obstaculo. Quita Mientras no llegue."
+      );
     }
 
     if (countBlocks("STOP") !== 1) {
@@ -668,15 +780,6 @@ export default function IntermediateLevelEditor({
         }
       }
     });
-
-    if (missionIndex >= 4 && whileIndexInProgram !== -1) {
-      const whileBodyLength = stopIndexInProgram - whileIndexInProgram - 1;
-      if (whileBodyLength !== 1) {
-        pushIssue("Mientras no llegue solo puede contener un bloque.", whileIndexInProgram);
-      } else if (program[whileIndexInProgram + 1]?.type !== "FORWARD") {
-        pushIssue("Mientras no llegue debe contener un solo bloque Avanzar.", whileIndexInProgram + 1);
-      }
-    }
 
     const executionBlocks = program.filter((block) => block.type !== "INIT");
     const stopIndex = executionBlocks.findIndex((block) => block.type === "STOP");
@@ -732,8 +835,6 @@ export default function IntermediateLevelEditor({
     let loopCount = 0;
     let loopStartIndex: number | null = null;
     let skipAfterBranch = 0;
-    let branchDecisionPending = false;
-    let branchSkipAfterChosen = 0;
     let evaluationMessage = "El programa no llega a la meta.";
 
     while (stepCount++ <= MAX_STEPS) {
@@ -814,12 +915,9 @@ export default function IntermediateLevelEditor({
           break;
         case "IF_OBS_ELSE":
           if (sensors.obstacleAhead) {
-            branchDecisionPending = true;
-            branchSkipAfterChosen = 1;
+            skipAfterBranch = 1;
           } else {
             stepIdx += 1;
-            branchDecisionPending = true;
-            branchSkipAfterChosen = 0;
           }
           jumpToNextTick = true;
           break;
@@ -844,14 +942,6 @@ export default function IntermediateLevelEditor({
       if (skipAfterBranch > 0) {
         stepIdx += skipAfterBranch;
         skipAfterBranch = 0;
-      }
-
-      if (branchDecisionPending) {
-        if (branchSkipAfterChosen > 0) {
-          stepIdx += branchSkipAfterChosen;
-        }
-        branchDecisionPending = false;
-        branchSkipAfterChosen = 0;
       }
 
       if (loopStartIndex !== null && stepIdx === loopExitIndex && getCell(pos) !== 3) {
@@ -896,14 +986,16 @@ export default function IntermediateLevelEditor({
           issues: [
             {
               message:
-                "Ahora puedes cargar el programa al robot fisico desde el boton de Cargar.",
+                missionIndex === 1
+                  ? "Pulsa Cargar para abrir la carga al robot y ver el envio del programa."
+                  : "Ahora puedes cargar el programa al robot fisico desde el boton de Cargar.",
             },
           ],
           highlightIndexes: [],
         });
 
-        if (showTutorial && tutorialVisible && tutorialStep === 2) {
-          setTutorialStep(3);
+        if (showTutorial && tutorialVisible && tutorialStep === 5) {
+          setTutorialStep(6);
         }
         return;
       }
@@ -939,26 +1031,39 @@ export default function IntermediateLevelEditor({
     tutorialVisible,
   ]);
 
-  const goToRobot = () => {
-    if (compilerResult.status === "success") {
-      const nextUnlocked = Math.min(LEVEL_2_STAGES.length, missionIndex + 1);
-      const currentStored =
-        typeof window !== "undefined"
-          ? Number(window.localStorage.getItem("bekie-level-2-progress") ?? "1")
-          : 1;
+  const robotTransferCommands = useMemo(
+    () =>
+      program.map((block) => {
+        const label = BLOCK_LABELS[block.type] ?? block.label;
+        if (
+          (block.type === "FORWARD" || block.type === "BACKWARD") &&
+          (block.steps ?? 1) > 1
+        ) {
+          return `${label} (N=${block.steps})`;
+        }
+        return label;
+      }),
+    [program]
+  );
 
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(
-          "bekie-level-2-progress",
-          String(Math.max(currentStored, nextUnlocked))
-        );
-      }
-      if (showTutorial) {
-        setTutorialVisible(false);
-        setFocusRect(null);
-      }
-      router.push("/robot");
+  const goToRobot = () => {
+    if (compilerResult.status !== "success") {
+      return;
     }
+
+    if (showTutorial) {
+      setTutorialVisible(false);
+      setTargetRect(null);
+    }
+
+    saveRobotLoadPayload({
+      levelKey: "2",
+      missionIndex,
+      missionTitle: stage.title,
+      commands: robotTransferCommands,
+    });
+
+    router.push(`/levels/2/load?mission=${missionIndex}`);
   };
 
   const paletteHint = useMemo(
@@ -975,8 +1080,12 @@ export default function IntermediateLevelEditor({
         return "En esta misión usa Si hay obstaculo / Si no hay obstaculo para escoger la salida correcta. La rama libre no tiene por qué ser Esperar: puede ser otro giro util si el escenario lo permite.";
       }
 
-      if (stage.id === 4 || stage.id === 5) {
-        return "En esta misión combina Si hay obstaculo / Si no hay obstaculo con Mientras no llegue. El numero en Avanzar se usa en la ruta que realmente se repite.";
+      if (stage.id === 4) {
+        return "En esta misión usa Si hay obstaculo / Si no hay obstaculo y varios Avanzar sueltos en linea recta. Cuenta las casillas del pasillo.";
+      }
+
+      if (stage.id === 5) {
+        return "En esta misión combina Si hay obstaculo / Si no hay obstaculo con un zigzag de giros y avances. El tramo final usa Avanzar sueltos hasta la meta.";
       }
 
       return "La mision requiere una secuencia mas completa y ordenada.";
@@ -998,7 +1107,7 @@ export default function IntermediateLevelEditor({
 
   const closeTutorial = () => {
     setTutorialVisible(false);
-    setFocusRect(null);
+    setTargetRect(null);
   };
 
   const nextTutorialStep = () => {
@@ -1019,33 +1128,21 @@ export default function IntermediateLevelEditor({
   const tutorialActionLabel = (() => {
     if (!currentTutorialStep) return "Siguiente";
     if (tutorialStep === TUTORIAL_STEPS.length - 1) return "Terminar";
-    if (!canAdvanceTutorial) return tutorialStep === 2 ? "Compila primero" : "Completa el paso";
+    if (!canAdvanceTutorial) return tutorialStep === 5 ? "Compila primero" : "Completa el paso";
     return "Siguiente";
   })();
 
-  const getPaletteBlockClasses = useCallback(
-    (def: PaletteBlock) => {
-      const base = `block-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-all ${def.colorClass} hover:brightness-125`;
-
-      if (!tutorialVisible || !currentTutorialStep || tutorialBlocksToPress.length === 0) {
-        return base;
-      }
-
-      if (tutorialHighlightBlocks.has(def.type)) {
-        return `${base} ring-2 ring-violet-200 shadow-[0_0_0_2px_rgba(168,85,247,0.32)] scale-[1.03] brightness-125 saturate-125`;
-      }
-
-      return `${base} opacity-15 saturate-0 brightness-60`;
-    },
-    [currentTutorialStep, tutorialBlocksToPress.length, tutorialHighlightBlocks, tutorialVisible]
-  );
-
-  const previousTutorialStep = () => {
-    setTutorialStep((current) => Math.max(0, current - 1));
-  };
+  const isIfObsElsePaletteHighlighted = showTutorial && tutorialVisible && tutorialStep === 0;
+  const isTurnRightPaletteHighlighted = showTutorial && tutorialVisible && tutorialStep === 1;
+  const isForwardPaletteHighlighted =
+    showTutorial && tutorialVisible && (tutorialStep === 2 || tutorialStep === 3);
+  const isStopPaletteHighlighted = showTutorial && tutorialVisible && tutorialStep === 4;
+  const isCompileButtonHighlighted = showTutorial && tutorialVisible && tutorialStep === 5;
+  const isLoadButtonHighlighted = showTutorial && tutorialVisible && tutorialStep === 6;
+  const isTutorialButtonSpotlight = tutorialStep === 5 || tutorialStep === 6;
 
   return (
-    <div className="min-h-[100dvh] bg-white flex flex-col">
+    <div className="relative min-h-[100dvh] bg-white flex flex-col overflow-x-hidden select-none">
       <AppNav userName="Beymar" role="student" />
 
       <div className="sticky top-[52px] z-30 border-b border-gray-300/60 bg-white/95 backdrop-blur px-4 py-2.5 flex items-center justify-between gap-3">
@@ -1068,12 +1165,15 @@ export default function IntermediateLevelEditor({
             Limpiar
           </button>
           <button
+            id="btn-compile"
             ref={compileRef}
             onClick={compileProgram}
             disabled={!canCompile}
-            className={`btn-press flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
-              canCompile
-                ? "bg-violet-600 text-white hover:bg-violet-700"
+            className={`btn-press flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all duration-300 ${
+              isCompileButtonHighlighted
+                ? "bg-indigo-650 ring-4 ring-indigo-500 ring-offset-2 animate-pulse scale-105 z-50 relative border-2 border-white shadow-xl text-white"
+                : canCompile
+                ? "bg-indigo-600 text-white hover:bg-indigo-700"
                 : "bg-gray-200 text-gray-400 cursor-not-allowed"
             }`}
           >
@@ -1081,11 +1181,14 @@ export default function IntermediateLevelEditor({
             Compilar
           </button>
           <button
+            id="btn-load"
             ref={loadRef}
             onClick={goToRobot}
             disabled={compilerResult.status !== "success"}
-            className={`btn-press flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
-              compilerResult.status === "success"
+            className={`btn-press flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all duration-300 ${
+              isLoadButtonHighlighted
+                ? "bg-emerald-500 ring-4 ring-emerald-400 ring-offset-2 animate-pulse scale-105 z-50 relative border-2 border-white shadow-xl text-white"
+                : compilerResult.status === "success"
                 ? "bg-emerald-500 text-white hover:bg-emerald-400"
                 : "bg-gray-200 text-gray-400 cursor-not-allowed"
             }`}
@@ -1115,24 +1218,44 @@ export default function IntermediateLevelEditor({
               {paletteHint}
             </div>
             <div className="flex flex-col gap-1.5">
-              {config.palette.map((def, i) => (
-                <button
-                  key={`${def.type}-${i}`}
-                  onClick={() => addBlock(def)}
-                  className={getPaletteBlockClasses(def)}
-                >
-                  <span className="flex-shrink-0">{def.icon}</span>
-                  <span className="text-xs font-mono">{def.label}</span>
-                  <Plus size={11} className="ml-auto opacity-40" />
-                </button>
-              ))}
+              {config.palette.map((def, i) => {
+                const isPaletteHighlighted =
+                  (def.type === "IF_OBS_ELSE" && isIfObsElsePaletteHighlighted) ||
+                  (def.type === "TURN_RIGHT" && isTurnRightPaletteHighlighted) ||
+                  (def.type === "FORWARD" && isForwardPaletteHighlighted) ||
+                  (def.type === "STOP" && isStopPaletteHighlighted);
+
+                return (
+                  <button
+                    id={`btn-palette-${def.type.toLowerCase()}`}
+                    key={`${def.type}-${i}`}
+                    type="button"
+                    draggable
+                    onDragStart={handlePaletteDragStart(def.type)}
+                    onDragEnd={() => setIsProgramDropActive(false)}
+                    className={`block-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                      isPaletteHighlighted
+                        ? "border-indigo-500 ring-4 ring-indigo-500 ring-offset-1 bg-indigo-50 animate-pulse text-indigo-900 z-50 relative scale-[1.03] shadow-md"
+                        : def.colorClass
+                    } hover:brightness-105 cursor-grab active:cursor-grabbing`}
+                  >
+                    <span className="flex-shrink-0">{def.icon}</span>
+                    <span className="text-xs font-mono flex-1">{def.label}</span>
+                    <span className="text-[10px] font-mono opacity-60 flex-shrink-0">Arrastra</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
         <div
           ref={programRef}
-          className="flex-1 flex flex-col min-w-0 border-r border-gray-300"
+          className={`flex-1 flex flex-col min-w-0 border-r border-gray-300 transition-all ${
+            isProgramDropGuideActive
+              ? "bg-violet-50/30 ring-4 ring-inset ring-violet-400/85 shadow-[0_0_0_1px_rgba(139,92,246,0.22),0_0_42px_rgba(139,92,246,0.32)]"
+              : ""
+          }`}
         >
           <div className="p-3 border-b border-gray-300/60 flex items-center justify-between">
             <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
@@ -1142,13 +1265,35 @@ export default function IntermediateLevelEditor({
               Mision {missionIndex}/5
             </span>
           </div>
-          <div className="flex-1 overflow-y-auto p-3">
-            <div className="flex flex-col gap-1.5">
+          <div
+            className={`relative flex-1 overflow-y-auto p-3 transition-all ${
+              isProgramDropActive ? "bg-violet-50/70" : ""
+            } ${
+              isProgramDropGuideActive
+                ? "bg-violet-50/60 ring-4 ring-inset ring-violet-400/70 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.14)]"
+                : ""
+            }`}
+            onDragOver={handleProgramDragOver}
+            onDrop={handleProgramDrop}
+          >
+            {isProgramDropGuideActive && (
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(196,181,253,0.26),transparent_58%)] animate-pulse" />
+            )}
+            {isProgramDropGuideActive && (
+              <div className="pointer-events-none absolute inset-2 rounded-xl border border-violet-300/90 bg-violet-100/20 shadow-[0_0_0_1px_rgba(167,139,250,0.18),0_0_38px_rgba(139,92,246,0.34)]" />
+            )}
+            {isProgramDropGuideActive && (
+              <div className="relative z-10 mb-2 flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-mono text-violet-700 uppercase tracking-wider shadow-[0_0_24px_rgba(139,92,246,0.18)]">
+                <span>Suelta los bloques aquí</span>
+                <span>Zona activa</span>
+              </div>
+            )}
+            <div className="relative z-10 flex flex-col gap-1.5 min-h-full">
               {renderProgramItems(programView)}
               {program.length < 2 && (
-                <div className="flex items-center gap-2 py-3 px-3 text-xs text-gray-500 border border-dashed border-gray-300 rounded-lg">
+                <div className="flex items-center gap-2 py-3 px-3 text-xs text-gray-500 border border-dashed border-gray-300 rounded-lg bg-white/80 shadow-sm">
                   <Plus size={13} />
-                  Agrega bloques desde el panel izquierdo
+                  Arrastra bloques desde el panel izquierdo
                 </div>
               )}
             </div>
@@ -1312,152 +1457,160 @@ export default function IntermediateLevelEditor({
         </div>
       </div>
 
-      {showTutorial && tutorialVisible && focusRect && (
-        <div className="fixed inset-0 z-[80] pointer-events-none">
-          <div
-            className="absolute rounded-2xl border-2 border-violet-300 shadow-[0_0_0_9999px_rgba(0,0,0,0.68)] transition-all duration-200"
-            style={{
-              top: focusRect.top,
-              left: focusRect.left,
-              width: focusRect.width,
-              height: focusRect.height,
-            }}
-          />
+      {showTutorial && tutorialVisible && targetRect && (
+        <div
+          className="fixed pointer-events-none transition-all duration-200"
+          style={{
+            left: targetRect.left - 6,
+            top: targetRect.top - 6,
+            width: targetRect.width + 12,
+            height: targetRect.height + 12,
+            borderRadius: isTutorialButtonSpotlight ? "9999px" : "12px",
+            boxShadow: "0 0 0 9999px rgba(9, 13, 22, 0.55)",
+            zIndex: 39,
+          }}
+        />
+      )}
 
-          <div className="absolute left-4 right-4 bottom-4 sm:left-6 sm:right-auto sm:max-w-[390px] pointer-events-auto">
-            <div className="rounded-2xl border border-white/20 bg-gray-950 text-white shadow-2xl p-4">
-              <div className="flex items-center justify-between gap-3 mb-2">
-                <p className="text-xs font-mono uppercase tracking-wider text-violet-300">
-                  {currentTutorialStep?.title}
-                </p>
-                <span className="text-[10px] font-mono text-gray-300">
-                  {tutorialStep + 1}/{TUTORIAL_STEPS.length}
-                </span>
+      {showTutorial && tutorialVisible && targetRect && (
+        <div
+          className="fixed pointer-events-none transition-all duration-200 animate-pulse"
+          style={{
+            left: targetRect.left - 6,
+            top: targetRect.top - 6,
+            width: targetRect.width + 12,
+            height: targetRect.height + 12,
+            borderRadius: isTutorialButtonSpotlight ? "9999px" : "12px",
+            border: "5px solid #ffffff",
+            boxShadow: "0 0 15px rgba(255, 255, 255, 0.9)",
+            zIndex: 40,
+          }}
+        />
+      )}
+
+      {showTutorial && tutorialVisible && currentTutorialStep && (
+        <motion.div
+          drag
+          dragMomentum={false}
+          dragElastic={0.1}
+          className="fixed w-[380px] bg-[#090d16] border border-slate-800 shadow-2xl shadow-black/85 rounded-3xl p-6 flex flex-col gap-4 select-none cursor-grab active:cursor-grabbing"
+          style={{ zIndex: 45, ...cardPlacementStyle }}
+        >
+          <div className="w-12 h-1 bg-slate-850 rounded-full mx-auto -mt-2 opacity-60" />
+
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <span className="text-[11px] font-bold font-mono text-indigo-400 uppercase tracking-widest">
+              PASO {tutorialStep + 1}
+            </span>
+            <span className="text-[11px] font-mono text-slate-500">
+              {tutorialStep + 1}/{TUTORIAL_STEPS.length}
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-200 leading-relaxed font-mono">{tutorialText}</p>
+
+          <div className="flex justify-between items-center mt-2 pt-3 border-t border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-indigo-400 text-[11px] font-bold font-mono shadow-md">
+                N
               </div>
-              <p className="text-sm leading-relaxed text-gray-100">{tutorialText}</p>
-              {!canAdvanceTutorial && currentTutorialStep && (
-                <p className="mt-2 text-[11px] leading-relaxed text-violet-200">
-                  {currentTutorialStep.lockText}
-                </p>
-              )}
+              <button
+                onClick={closeTutorial}
+                className="text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+              >
+                Omitir
+              </button>
+            </div>
 
-              <div className="mt-4 flex items-center justify-between gap-2">
+            <div className="flex gap-2">
+              {tutorialStep > 0 && (
+                <button
+                  onClick={() => setTutorialStep((current) => Math.max(0, current - 1))}
+                  className="border border-slate-850 hover:bg-slate-800/40 text-slate-300 font-semibold text-xs px-4 py-2 rounded-xl transition-all"
+                >
+                  Atrás
+                </button>
+              )}
+              {tutorialStep === TUTORIAL_STEPS.length - 1 ? (
                 <button
                   onClick={closeTutorial}
-                  className="btn-press text-[11px] font-semibold px-3 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-900 transition-colors"
+                  className="bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-lg shadow-indigo-650/30 transition-all"
                 >
-                  Omitir
+                  Terminar
                 </button>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={previousTutorialStep}
-                    disabled={tutorialStep === 0}
-                    className="btn-press text-[11px] font-semibold px-3 py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Atrás
-                  </button>
-                  <button
-                    onClick={nextTutorialStep}
-                    disabled={!canAdvanceTutorial}
-                    className="btn-press text-[11px] font-semibold px-3 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
-                  >
-                    {tutorialActionLabel}
-                  </button>
-                </div>
-              </div>
+              ) : (
+                <button
+                  disabled={!canAdvanceTutorial}
+                  onClick={nextTutorialStep}
+                  className={`font-bold text-xs px-4 py-2 rounded-xl transition-all ${
+                    canAdvanceTutorial
+                      ? "bg-indigo-650 hover:bg-indigo-750 text-white shadow-lg shadow-indigo-650/30 cursor-pointer"
+                      : "bg-slate-900 text-slate-600 border border-slate-850 cursor-not-allowed"
+                  }`}
+                >
+                  {canAdvanceTutorial ? "Siguiente" : tutorialActionLabel}
+                </button>
+              )}
             </div>
+          </div>
+        </motion.div>
+      )}
+
+      {scenarioIntroVisible && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-[2px] p-4 animate-fade-in">
+          <div className="w-full max-w-[450px] bg-white rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col p-8 text-center transition-all duration-300">
+            <p className="text-[11px] font-semibold font-mono text-indigo-600 uppercase tracking-widest mb-1.5">
+              NIVEL 1 - INTERMEDIO / MISIÓN {missionIndex}
+            </p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">{stage.title}</h2>
+
+            <div
+              className="aspect-square w-full max-w-[260px] mx-auto border border-gray-100 bg-gray-50/50 rounded-2xl p-4 mb-6 grid gap-2"
+              style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
+            >
+              {Array.from({ length: gridSize }).map((_, r) =>
+                Array.from({ length: gridSize }).map((_, c) => {
+                  const isStart = stage.grid[r][c] === 2;
+                  const isGoal = stage.grid[r][c] === 3;
+                  const isObstacle = stage.grid[r][c] === 1;
+                  return (
+                    <div
+                      key={`intro-${r}-${c}`}
+                      className={`aspect-square rounded-lg flex items-center justify-center font-bold text-[10px] transition-all duration-300 ${
+                        isStart
+                          ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                          : isGoal
+                          ? "bg-emerald-100 border border-emerald-300 text-emerald-700 font-bold"
+                          : isObstacle
+                          ? "bg-gray-600 text-white"
+                          : "bg-white border border-gray-100 shadow-sm"
+                      }`}
+                    >
+                      {isStart && "→"}
+                      {isGoal && "META"}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-indigo-100/60 bg-indigo-50/40 p-5 text-left mb-6">
+              <p className="text-[10px] font-bold font-mono text-indigo-600 uppercase tracking-wider mb-2">
+                INSTRUCCIONES DEL ESCENARIO
+              </p>
+              <p className="text-xs text-gray-700 leading-relaxed font-mono">{stage.summary}</p>
+            </div>
+
+            <button
+              onClick={dismissScenarioIntro}
+              className="btn-press bg-indigo-600 hover:bg-indigo-750 text-white font-bold text-sm py-3.5 rounded-2xl shadow-lg shadow-indigo-600/20 transition-all duration-200 w-full"
+            >
+              {showTutorial ? "Comenzar tutorial" : "Comenzar mision"}
+            </button>
           </div>
         </div>
       )}
 
-      {scenarioIntroVisible && (
-        <motion.div
-          className="fixed inset-0 z-[90] flex cursor-pointer items-center justify-center bg-black/75 px-4 py-6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.25, ease: EASE_OUT }}
-          onClick={dismissScenarioIntro}
-        >
-          <motion.div
-            className="w-full max-w-5xl rounded-[28px] border border-white/20 bg-white shadow-2xl overflow-hidden"
-            initial={{ scale: 0.94, y: 18, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            transition={{ duration: 0.32, ease: EASE_OUT }}
-          >
-            <div className="bg-violet-50/85 border-b border-violet-200 px-5 py-4">
-              <p className="text-[10px] font-mono text-violet-700 uppercase tracking-[0.3em] mb-2">
-                Presiona en cualquier lugar para continuar
-              </p>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{stage.scenarioLabel}</p>
-                  <p className="text-2xl font-bold tracking-tight text-gray-900 mt-1">
-                    {stage.title}
-                  </p>
-                </div>
-                <p className="text-xs font-mono px-2.5 py-1 rounded-full bg-violet-400/10 text-violet-700 flex-shrink-0">
-                  {stage.difficulty}
-                </p>
-              </div>
-              <p className="mt-2 text-sm text-gray-600 leading-relaxed">{stage.summary}</p>
-            </div>
-
-            <div className="p-5">
-              <div
-                className="grid gap-1.5"
-                style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
-              >
-                {Array.from({ length: gridSize }).map((_, row) =>
-                  Array.from({ length: gridSize }).map((_, col) => {
-                    const cell = stage.grid[row][col];
-                    const isStart = cell === 2;
-                    const isGoal = cell === 3;
-                    const isObstacle = cell === 1;
-
-                    return (
-                      <div
-                        key={`intro-${row}-${col}`}
-                        className={`aspect-square rounded-md flex items-center justify-center text-[11px] font-mono ${
-                          isObstacle
-                            ? "bg-gray-600 border border-gray-500"
-                            : isGoal
-                            ? "bg-emerald-100 border border-emerald-400"
-                            : isStart
-                            ? "bg-gray-200 border border-gray-300"
-                            : "bg-gray-50 border border-gray-200"
-                        }`}
-                      >
-                        {isGoal && (
-                          <span className="text-emerald-700 text-[9px] font-bold">META</span>
-                        )}
-                        {isObstacle && <span className="text-gray-300">■</span>}
-                        {isStart && (
-                          <span className="text-gray-500 text-sm font-bold">
-                            {config.startDir === 0
-                              ? "→"
-                              : config.startDir === 1
-                              ? "↓"
-                              : config.startDir === 2
-                              ? "←"
-                              : "↑"}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              <p className="mt-4 text-sm text-gray-700 leading-relaxed">
-                {stage.objective}
-              </p>
-              <p className="mt-2 text-xs text-violet-700 leading-relaxed">
-                Construye este escenario para realizar las pruebas.
-              </p>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
     </div>
   );
 }
