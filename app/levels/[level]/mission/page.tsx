@@ -511,14 +511,14 @@ export default function MissionPage() {
                   <h2 className="text-sm font-semibold text-gray-700">Progreso del nivel</h2>
                 </div>
                 <p className="text-sm text-gray-600 leading-relaxed mb-4">
-                  El nivel tiene 5 misiones secuenciales. Completa cada mision para desbloquear la siguiente.
+                  El nivel tiene {stages.length} misiones secuenciales. Completa cada mision para desbloquear la siguiente.
                 </p>
                 <div className="mb-4 flex items-center justify-between text-xs font-mono text-gray-500">
                   <span>Misiones completadas</span>
-                  <span>{completedMissionCount}/{LEVEL_0_STAGES.length}</span>
+                  <span>{completedMissionCount}/{stages.length}</span>
                 </div>
                 <div className="grid gap-3">
-                  {LEVEL_0_STAGES.map((stage) => {
+                  {stages.map((stage) => {
                     const unlocked = stage.id <= nextMission;
                     return (
                       <div
@@ -531,7 +531,7 @@ export default function MissionPage() {
                           <div className="flex-1">
                             <div className="flex flex-wrap items-center gap-2 mb-2">
                               <span className="text-xs font-mono px-2 py-1 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
-                                Mision {stage.id}/5
+                                Mision {stage.id}/{stages.length}
                               </span>
                               <span
                                 className={`text-xs font-mono px-2 py-1 rounded-full border ${
@@ -566,7 +566,7 @@ export default function MissionPage() {
                               href={`/levels/${levelKey}/editor?mission=${stage.id}`}
                               className="btn-press inline-flex items-center justify-center gap-2 bg-cyan-600 text-white font-bold text-sm px-4 py-2.5 rounded-xl hover:bg-cyan-700 transition-colors"
                             >
-                              Abrir mision
+                              {stage.id === 1 ? "Abrir tutorial" : "Abrir mision"}
                               <ArrowRight size={16} weight="bold" />
                             </Link>
                           ) : (
@@ -654,7 +654,7 @@ export default function MissionPage() {
             href={`/levels/${levelKey}/editor?mission=1`}
             className="btn-press mt-8 flex items-center justify-center gap-2 w-full bg-cyan-600 text-white font-bold text-sm py-3.5 rounded-xl hover:bg-cyan-700 transition-colors"
           >
-            Comenzar Mision 1
+            Comenzar tutorial
             <ArrowRight size={16} weight="bold" />
           </Link>
         </motion.div>

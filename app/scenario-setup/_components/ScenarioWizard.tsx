@@ -8,7 +8,7 @@ import StepScreen from "./StepScreen";
 import ChecklistScreen from "./ChecklistScreen";
 import ConfirmedScreen from "./ConfirmedScreen";
 
-const EASE_OUT = [0.23, 1, 0.32, 1];
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 export default function ScenarioWizard() {
   const {

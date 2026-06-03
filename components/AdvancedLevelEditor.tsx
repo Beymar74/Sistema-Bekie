@@ -187,6 +187,7 @@ export default function AdvancedLevelEditor({
   const [tutorialStep, setTutorialStep] = useState(0);
   const [scenarioIntroVisible, setScenarioIntroVisible] = useState(true);
   const [isProgramDropActive, setIsProgramDropActive] = useState(false);
+  const [isDraggingBlock, setIsDraggingBlock] = useState(false);
   const [targetRect, setTargetRect] = useState<{
     top: number;
     left: number;
@@ -207,6 +208,54 @@ export default function AdvancedLevelEditor({
   const handlePaletteDragStart = (type: BlockType) => (event: DragEvent<HTMLButtonElement>) => {
     event.dataTransfer.effectAllowed = "copy";
     event.dataTransfer.setData(BLOCK_DRAG_MIME, type);
+    setIsDraggingBlock(true);
+  };
+
+  const handleProgramDragStart = (index: number) => (event: DragEvent<HTMLDivElement>) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-bekie-block-index", String(index));
+    setIsDraggingBlock(true);
+  };
+
+  const handleProgramDragEnd = () => {
+    setIsDraggingBlock(false);
+    setIsProgramDropActive(false);
+  };
+
+  const insertBlockAt = (def: PaletteBlock, index: number) => {
+    if (program.length >= 25) return;
+    setProgram((current) => {
+      const next = [...current];
+      next.splice(index, 0, {
+        ...def,
+        id: `b_${next.length + 1}_${Date.now()}`,
+        ...(def.type === "REPEAT" ? { steps: 3 } : def.type === "FORWARD" ? { steps: 1 } : {}),
+      });
+      return next;
+    });
+    setCompilerResult({
+      status: "idle",
+      message: "La secuencia cambio. Vuelve a compilar para validar la nueva version.",
+      issues: [],
+      highlightIndexes: [],
+    });
+  };
+
+  const moveBlock = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    setProgram((current) => {
+      const next = [...current];
+      const [moved] = next.splice(fromIndex, 1);
+      const targetIdx = toIndex > fromIndex ? toIndex - 1 : toIndex;
+      next.splice(targetIdx, 0, moved);
+      return next;
+    });
+    setCompilerResult({
+      status: "idle",
+      message: "La secuencia cambio. Vuelve a compilar para validar la nueva version.",
+      issues: [],
+      highlightIndexes: [],
+    });
   };
 
   const handleProgramDragOver = (event: DragEvent<HTMLDivElement>) => {
@@ -499,6 +548,54 @@ export default function AdvancedLevelEditor({
     return buildView(0);
   }, [program]);
 
+  const DropIndicator = ({ index }: { index: number }) => {
+    const [isOver, setIsOver] = useState(false);
+    return (
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.stopPropagation();
+          setIsOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsOver(false);
+
+          const reorderIdxStr = e.dataTransfer.getData("application/x-bekie-block-index");
+          if (reorderIdxStr) {
+            const fromIndex = Number(reorderIdxStr);
+            if (!Number.isNaN(fromIndex)) {
+              moveBlock(fromIndex, index);
+              return;
+            }
+          }
+
+          const type = e.dataTransfer.getData(BLOCK_DRAG_MIME) as BlockType;
+          if (!type) return;
+          const def = getPaletteBlock(type);
+          if (!def) return;
+          insertBlockAt(def, index);
+        }}
+        className={`w-full h-2 -my-1.5 transition-all duration-150 relative flex items-center justify-center z-30 ${
+          isOver || isDraggingBlock ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div
+          className={`w-full rounded-full transition-all duration-150 ${
+            isOver
+              ? "h-[4px] bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.6)]"
+              : "h-[2px] bg-cyan-400/30"
+          }`}
+        />
+      </div>
+    );
+  };
+
   const renderBlockRow = (
     block: Block,
     index: number,
@@ -511,9 +608,14 @@ export default function AdvancedLevelEditor({
     return (
       <div
         key={block.id}
+        draggable={index > 0}
+        onDragStart={handleProgramDragStart(index)}
+        onDragEnd={handleProgramDragEnd}
         className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border ${block.colorClass} ${
           isHighlighted ? "ring-2 ring-red-400 bg-red-50" : ""
-        } ${options?.className ?? ""} ${nested ? "shadow-sm" : ""}`}
+        } ${options?.className ?? ""} ${nested ? "shadow-sm" : ""} ${
+          index > 0 ? "cursor-grab active:cursor-grabbing" : ""
+        }`}
       >
         <span className="text-[10px] font-mono text-gray-400 w-4 flex-shrink-0">
           {index + 1}
@@ -580,9 +682,12 @@ export default function AdvancedLevelEditor({
     return (
       <div
         key={block.id}
+        draggable={index > 0}
+        onDragStart={handleProgramDragStart(index)}
+        onDragEnd={handleProgramDragEnd}
         className={`rounded-xl border ${block.colorClass} ${
           isHighlighted ? "ring-2 ring-red-400 bg-red-50" : ""
-        } overflow-hidden`}
+        } overflow-hidden ${index > 0 ? "cursor-grab active:cursor-grabbing" : ""}`}
       >
         <div className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left bg-white/40">
           <div className="flex flex-1 items-center gap-2.5 text-left">
@@ -640,9 +745,35 @@ export default function AdvancedLevelEditor({
               ACCION A REPETIR {loopIterations} VECES
             </div>
             {bodyChildren.length > 0 ? (
-              <div className="flex flex-col gap-1.5">{bodyChildren}</div>
+              <div className="flex flex-col gap-1.5">
+                {bodyChildren}
+                <DropIndicator index={index + bodyChildren.length + 1} />
+              </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500">
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const reorderIdxStr = e.dataTransfer.getData("application/x-bekie-block-index");
+                  if (reorderIdxStr) {
+                    const fromIndex = Number(reorderIdxStr);
+                    if (!Number.isNaN(fromIndex)) {
+                      moveBlock(fromIndex, index + 1);
+                      return;
+                    }
+                  }
+                  const type = e.dataTransfer.getData(BLOCK_DRAG_MIME) as BlockType;
+                  if (!type) return;
+                  const def = getPaletteBlock(type);
+                  if (!def) return;
+                  insertBlockAt(def, index + 1);
+                }}
+                className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500"
+              >
                 {bodyPlaceholder}
               </div>
             )}
@@ -656,23 +787,31 @@ export default function AdvancedLevelEditor({
     items: ProgramViewItem[],
     nested = false,
     allowSteps = false
-  ): ReactNode[] =>
-    items.map((item) => {
+  ): ReactNode[] => {
+    const nodes: ReactNode[] = [];
+    items.forEach((item) => {
       if (item.kind === "block") {
-        return renderBlockRow(item.block, item.index, { nested, allowSteps });
-      }
-
-      if (item.kind === "conditional") {
+        if (item.index > 0) {
+          nodes.push(<DropIndicator key={`drop-${item.block.id}`} index={item.index} />);
+        }
+        nodes.push(renderBlockRow(item.block, item.index, { nested, allowSteps }));
+      } else if (item.kind === "conditional") {
+        if (item.index > 0) {
+          nodes.push(<DropIndicator key={`drop-${item.block.id}`} index={item.index} />);
+        }
         const isHighlighted = [item.index, item.ifIndex, item.elseIndex].some((index) =>
           typeof index === "number" ? compilerResult.highlightIndexes.includes(index) : false
         );
 
-        return (
+        nodes.push(
           <div
             key={item.block.id}
+            draggable={item.index > 0}
+            onDragStart={handleProgramDragStart(item.index)}
+            onDragEnd={handleProgramDragEnd}
             className={`rounded-xl border ${item.block.colorClass} ${
               isHighlighted ? "ring-2 ring-red-400 bg-red-50" : ""
-            } overflow-hidden`}
+            } overflow-hidden ${item.index > 0 ? "cursor-grab active:cursor-grabbing" : ""}`}
           >
             <div className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left">
               <div className="flex flex-1 items-center gap-2.5 text-left">
@@ -715,7 +854,30 @@ export default function AdvancedLevelEditor({
                     })
                   )
                 ) : (
-                  <div className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500">
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const reorderIdxStr = e.dataTransfer.getData("application/x-bekie-block-index");
+                      if (reorderIdxStr) {
+                        const fromIndex = Number(reorderIdxStr);
+                        if (!Number.isNaN(fromIndex)) {
+                          moveBlock(fromIndex, item.index + 1);
+                          return;
+                        }
+                      }
+                      const type = e.dataTransfer.getData(BLOCK_DRAG_MIME) as BlockType;
+                      if (!type) return;
+                      const def = getPaletteBlock(type);
+                      if (!def) return;
+                      insertBlockAt(def, item.index + 1);
+                    }}
+                    className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500"
+                  >
                     Agrega aqui la respuesta del obstaculo
                   </div>
                 )}
@@ -741,7 +903,30 @@ export default function AdvancedLevelEditor({
                     })
                   )
                 ) : (
-                  <div className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500">
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const reorderIdxStr = e.dataTransfer.getData("application/x-bekie-block-index");
+                      if (reorderIdxStr) {
+                        const fromIndex = Number(reorderIdxStr);
+                        if (!Number.isNaN(fromIndex)) {
+                          moveBlock(fromIndex, item.index + 2);
+                          return;
+                        }
+                      }
+                      const type = e.dataTransfer.getData(BLOCK_DRAG_MIME) as BlockType;
+                      if (!type) return;
+                      const def = getPaletteBlock(type);
+                      if (!def) return;
+                      insertBlockAt(def, item.index + 2);
+                    }}
+                    className="rounded-lg border border-dashed border-gray-300 bg-white/70 px-3 py-3 text-[11px] text-gray-500"
+                  >
                     Agrega aqui la respuesta libre
                   </div>
                 )}
@@ -749,19 +934,22 @@ export default function AdvancedLevelEditor({
             </div>
           </div>
         );
-      }
-
-      if (item.kind === "loop") {
-        return renderLoopCard(
-          item.block,
-          item.index,
-          renderProgramItems(item.body, true, false),
-          "Agrega aqui la ruta que se repetira"
+      } else if (item.kind === "loop") {
+        if (item.index > 0) {
+          nodes.push(<DropIndicator key={`drop-${item.block.id}`} index={item.index} />);
+        }
+        nodes.push(
+          renderLoopCard(
+            item.block,
+            item.index,
+            renderProgramItems(item.body, true, false),
+            "Agrega aqui la ruta que se repetira"
+          )
         );
       }
-
-      return null;
     });
+    return nodes;
+  };
 
   const compileProgram = useCallback(() => {
     if (!canCompile) {
@@ -1230,6 +1418,7 @@ export default function AdvancedLevelEditor({
             )}
             <div className="relative z-10 flex flex-col gap-2 min-h-full">
               {renderProgramItems(programView, false, true)}
+              {program.length > 1 && <DropIndicator index={program.length} />}
               {program.length < 2 && (
                 <div className="flex items-center justify-center gap-2 py-8 px-4 text-xs text-gray-400 border border-dashed border-gray-300 bg-white/85 rounded-xl shadow-sm">
                   <Plus size={14} />

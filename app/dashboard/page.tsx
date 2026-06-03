@@ -335,7 +335,7 @@ export default function DashboardPage() {
                 score: 72,
               },
               {
-                name: "Secuencia larga",
+                name: "Ruta con obstaculo",
                 level: 0,
                 status: "En progreso",
                 time: "--:--",

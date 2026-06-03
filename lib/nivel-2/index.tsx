@@ -70,10 +70,10 @@ export const LEVEL_3_STAGES: MissionStage[] = [
     scenarioLabel: "ESCENARIO 2 / 5x5",
     grid: [
       [2, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [3, 0, 0, 0, 0],
+      [1, 1, 1, 1, 0],
+      [1, 1, 1, 1, 0],
+      [1, 1, 1, 1, 0],
+      [1, 1, 1, 1, 3],
     ],
     requiredSequence: ["INIT", "REPEAT", "FORWARD", "TURN_RIGHT", "REPEAT", "FORWARD", "STOP"],
     learningOutcomes: [
@@ -85,7 +85,7 @@ export const LEVEL_3_STAGES: MissionStage[] = [
       "Gira a la derecha y luego avanza otras 4 celdas usando otro bucle For.",
       "Termina el programa con Detener sobre la meta.",
     ],
-    victory: "El robot alcanza la esquina inferior izquierda del tablero usando bucles.",
+    victory: "El robot alcanza la esquina inferior derecha del tablero usando bucles.",
     tips: [
       "Usa la cantidad exacta de pasos N en cada bucle.",
     ],
@@ -98,12 +98,12 @@ export const LEVEL_3_STAGES: MissionStage[] = [
     summary: "Decide la direccion correcta al inicio y luego usa un bucle For para recorrer el tramo final.",
     scenarioLabel: "ESCENARIO 3 / 6x6",
     grid: [
-      [2, 1, 0, 0, 0, 0],
+      [2, 1, 1, 1, 1, 1],
       [0, 0, 0, 0, 0, 3],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
+      [1, 1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1, 1],
     ],
     requiredSequence: ["INIT", "IF_OBS_ELSE", "TURN_RIGHT", "FORWARD", "REPEAT", "FORWARD", "STOP"],
     learningOutcomes: [
@@ -127,12 +127,12 @@ export const LEVEL_3_STAGES: MissionStage[] = [
     summary: "Si no hay obstaculo avanza con un bucle, si hay obstaculo toma otra ruta.",
     scenarioLabel: "ESCENARIO 4 / 6x6",
     grid: [
-      [2, 0, 0, 0, 1, 0],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 3],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
+      [2, 0, 0, 0, 1, 1],
+      [1, 1, 1, 0, 1, 1],
+      [1, 1, 1, 0, 0, 3],
+      [1, 1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1, 1],
     ],
     requiredSequence: ["INIT", "IF_OBS_ELSE", "REPEAT", "FORWARD", "FORWARD", "STOP"],
     learningOutcomes: [
@@ -152,17 +152,17 @@ export const LEVEL_3_STAGES: MissionStage[] = [
   {
     id: 5,
     title: "Desafio maestro",
-    difficulty: "Final",
+    difficulty: "Alta",
     objective: "Resuelve una ruta de alta complejidad anidando condicionales dentro de bucles y usando For.",
     summary: "Zigzag complejo con obstaculos fijos que requiere optimizacion maxima de bloques.",
     scenarioLabel: "ESCENARIO 5 / Desafio Maestro",
     grid: [
-      [2, 0, 1, 0, 0, 0],
-      [0, 0, 1, 0, 0, 0],
-      [0, 0, 0, 0, 1, 0],
-      [0, 1, 1, 0, 1, 3],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
+      [2, 0, 1, 1, 1, 1],
+      [1, 0, 1, 1, 1, 1],
+      [1, 0, 0, 0, 1, 1],
+      [1, 1, 1, 0, 1, 3],
+      [1, 1, 1, 0, 0, 0],
+      [1, 1, 1, 1, 1, 1],
     ],
     requiredSequence: ["INIT", "REPEAT", "IF_OBS_ELSE", "TURN_RIGHT", "FORWARD", "STOP"],
     learningOutcomes: [
@@ -177,6 +177,136 @@ export const LEVEL_3_STAGES: MissionStage[] = [
     tips: [
       "Analiza el recorrido del robot y cuenta cuantas repeticiones totales requiere.",
     ],
+  },
+  {
+    id: 6,
+    title: "Espiral cuadrada",
+    difficulty: "Alta",
+    objective: "Usa multiples bucles para guiar al robot hacia el centro de un espiral cuadrado.",
+    summary: "Navega hacia el interior de un laberinto en espiral usando secuencias de bucles de tamaño decreciente.",
+    scenarioLabel: "ESCENARIO 6 / Espiral",
+    grid: [
+      [2, 0, 0, 0, 0, 0],
+      [1, 1, 1, 1, 1, 0],
+      [1, 3, 0, 0, 1, 0],
+      [1, 0, 1, 0, 1, 0],
+      [1, 0, 1, 0, 1, 0],
+      [1, 0, 0, 0, 0, 0],
+    ],
+    requiredSequence: [
+      "INIT",
+      "REPEAT", "FORWARD", "TURN_RIGHT",
+      "REPEAT", "FORWARD", "TURN_RIGHT",
+      "REPEAT", "FORWARD", "TURN_RIGHT",
+      "REPEAT", "FORWARD",
+      "STOP"
+    ],
+    learningOutcomes: [
+      "Encadenar multiples bucles con diferentes valores de N.",
+      "Comprender el patron de reduccion de paso en espirales.",
+      "Controlar la orientacion del robot en giros continuos a la derecha."
+    ],
+    instructions: [
+      "Comienza con Iniciar mision.",
+      "Avanza 5 celdas a la derecha con un bucle de N=5, y gira a la derecha.",
+      "Avanza 5 celdas abajo con un bucle de N=5, y gira a la derecha.",
+      "Avanza 4 celdas a la izquierda con un bucle de N=4, y gira a la derecha.",
+      "Avanza 3 celdas arriba con un bucle de N=3 para alcanzar la meta.",
+      "Cierra la secuencia con Detener."
+    ],
+    victory: "El robot alcanza la meta en el centro del espiral mediante un patron de bucles repetitivos y giros ordenados.",
+    tips: [
+      "Cuenta bien los pasos del robot en cada tramo recto.",
+      "Cada giro a la derecha te orienta hacia la siguiente seccion del espiral."
+    ]
+  },
+  {
+    id: 7,
+    title: "El laberinto en U",
+    difficulty: "Alta",
+    objective: "Supera un corredor largo en forma de U usando bucles optimizados.",
+    summary: "Recorre dos tramos largos y uno corto para sortear las paredes externas en U del laberinto.",
+    scenarioLabel: "ESCENARIO 7 / Laberinto en U",
+    grid: [
+      [2, 0, 0, 0, 0, 0],
+      [1, 1, 1, 1, 1, 0],
+      [0, 0, 0, 0, 1, 0],
+      [0, 1, 1, 0, 1, 0],
+      [0, 1, 3, 0, 0, 0],
+      [0, 1, 1, 1, 1, 1],
+    ],
+    requiredSequence: [
+      "INIT",
+      "REPEAT", "FORWARD", "TURN_RIGHT",
+      "REPEAT", "FORWARD", "TURN_RIGHT",
+      "REPEAT", "FORWARD",
+      "STOP"
+    ],
+    learningOutcomes: [
+      "Resolver trayectos en forma de U con la menor cantidad de bloques.",
+      "Calcular distancias de avance en corredores paralelos.",
+      "Utilizar la simulacion 2D para ajustar el valor de N."
+    ],
+    instructions: [
+      "Inicia con el bloque de entrada.",
+      "Avanza 5 celdas a la derecha con un bucle N=5 y gira a la derecha.",
+      "Avanza 4 celdas hacia abajo con un bucle N=4 y gira a la derecha.",
+      "Avanza 3 celdas a la izquierda con un bucle N=3 para llegar al punto META.",
+      "Coloca Detener al final del recorrido."
+    ],
+    victory: "El robot recorre el canal en U y se detiene exactamente en la meta.",
+    tips: [
+      "Observa que el primer tramo tiene 5 celdas libres, el segundo tiene 4 y el tercero tiene 3.",
+      "Asegurate de orientar al robot a la derecha antes de girar."
+    ]
+  },
+  {
+    id: 8,
+    title: "Doble zigzag",
+    difficulty: "Final",
+    objective: "Domina el movimiento avanzado esquivando obstaculos en un doble zigzag de alta precision.",
+    summary: "Planifica una secuencia de giros alternados y bucles para sortear un pasillo de obstaculos dobles.",
+    scenarioLabel: "ESCENARIO 8 / Desafio Final",
+    grid: [
+      [2, 0, 1, 0, 0, 0],
+      [0, 0, 1, 0, 0, 0],
+      [1, 0, 0, 0, 1, 0],
+      [1, 1, 1, 0, 1, 0],
+      [0, 0, 0, 0, 1, 0],
+      [0, 0, 0, 0, 0, 3],
+    ],
+    requiredSequence: [
+      "INIT",
+      "FORWARD",
+      "TURN_RIGHT",
+      "REPEAT", "FORWARD",
+      "TURN_LEFT",
+      "REPEAT", "FORWARD",
+      "TURN_RIGHT",
+      "REPEAT", "FORWARD",
+      "TURN_LEFT",
+      "REPEAT", "FORWARD",
+      "STOP"
+    ],
+    learningOutcomes: [
+      "Estructurar trayectorias complejas con multiples giros alternados.",
+      "Combinar bloques de avance simple con bucles repetitivos.",
+      "Completar el nivel avanzado demostrando control total sobre el robot."
+    ],
+    instructions: [
+      "Inicia la secuencia.",
+      "Avanza 1 paso al frente y gira a la derecha.",
+      "Usa un bucle de N=2 para avanzar 2 pasos, y gira a la izquierda.",
+      "Usa un bucle de N=2 para avanzar 2 pasos, y gira a la derecha.",
+      "Usa un bucle de N=3 para avanzar 3 pasos, y gira a la izquierda.",
+      "Usa un bucle de N=2 para avanzar 2 pasos para llegar a la META.",
+      "Finaliza con Detener."
+    ],
+    victory: "El robot recorre el laberinto de doble zigzag completo sin tocar ningun obstaculo y finaliza en la meta.",
+    tips: [
+      "Dibuja o imagina la ruta en el simulador paso por paso.",
+      "Recuerda que cada giro cambia tu orientacion y determina la direccion del siguiente bucle."
+    ]
   },
 ];
 

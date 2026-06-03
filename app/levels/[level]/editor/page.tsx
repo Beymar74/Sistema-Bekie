@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import AppNav from "@/components/AppNav";
+import BasicLevelEditor from "@/components/BasicLevelEditor";
 import IntermediateLevelEditor from "@/components/IntermediateLevelEditor";
 import AdvancedLevelEditor from "@/components/AdvancedLevelEditor";
 import {
@@ -84,27 +85,27 @@ const MOVEMENT_BLOCK_TYPES: BlockType[] = ["FORWARD", "BACKWARD", "TURN_RIGHT", 
 
 function compileLevel0(blocks: { type: BlockType }[]): string | null {
   if (blocks.length === 0 || blocks[0].type !== "INIT") {
-    return "Tu programa debe comenzar con el bloque Iniciar mision.";
+    return "¡Hola! Todo gran viaje inicia con un primer paso. 🚀 Por favor, coloca el bloque Iniciar misión al principio.";
   }
   const initCount = blocks.filter((b) => b.type === "INIT").length;
   if (initCount > 1) {
-    return "Solo puedes usar un bloque Iniciar mision.";
+    return "¡Un solo inicio es suficiente! 😉 Quédate con un solo bloque Iniciar misión para no confundir al robot.";
   }
   const hasAdvanced = blocks.some((b) => ADVANCED_BLOCK_TYPES.includes(b.type));
   if (hasAdvanced) {
-    return "Este bloque pertenece a un nivel mas avanzado.";
+    return "¡Cuidado! 🧪 Ese bloque es para misiones futuras. Por ahora, usemos bloques más sencillos.";
   }
   const lastBlock = blocks[blocks.length - 1];
   if (!lastBlock || lastBlock.type !== "STOP") {
-    return "Tu programa debe terminar con el bloque Detener.";
+    return "¡Casi listo! 🏁 Agrega el bloque Detener al final para que el robot sepa dónde terminar.";
   }
   const stopIdx = blocks.findIndex((b) => b.type === "STOP");
   if (stopIdx < blocks.length - 1) {
-    return "No puede haber instrucciones despues de Detener.";
+    return "¡Alto ahí! 🛑 El bloque Detener debe ser el último de tu secuencia. Quita lo que pusiste después.";
   }
   const hasMovement = blocks.some((b) => MOVEMENT_BLOCK_TYPES.includes(b.type));
   if (!hasMovement) {
-    return "Agrega al menos un bloque de movimiento.";
+    return "¡Haz que se mueva! 🏃‍♂️ Agrega al menos un bloque de movimiento para ver al robot en acción.";
   }
   return null;
 }
@@ -136,6 +137,26 @@ export default function EditorPage() {
       />
     );
   }
+
+  // ── Nivel 0: delegate entirely to BasicLevelEditor ──
+  if (isBasic) {
+    const missionIndexRaw = Number(searchParams.get("mission") ?? "1");
+    const missionIndex = Math.min(
+      LEVEL_0_STAGES.length,
+      Math.max(1, Number.isNaN(missionIndexRaw) ? 1 : missionIndexRaw)
+    );
+    const stage = LEVEL_0_STAGES[missionIndex - 1] ?? LEVEL_0_STAGES[0];
+    const config = { ...BASIC_LEVEL_EDITORS["1"], grid: stage.grid };
+    return (
+      <BasicLevelEditor
+        key={missionIndex}
+        config={config}
+        stage={stage}
+        missionIndex={missionIndex}
+      />
+    );
+  }
+
   const config = isIntermediate
     ? INTERMEDIATE_LEVEL_EDITORS["2"]
     : BASIC_LEVEL_EDITORS["1"];

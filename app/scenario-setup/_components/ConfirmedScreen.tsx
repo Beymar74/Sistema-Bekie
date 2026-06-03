@@ -2,7 +2,7 @@
 
 import { motion } from "motion/react";
 
-const EASE_OUT = [0.23, 1, 0.32, 1];
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 export default function ConfirmedScreen() {
   return (
