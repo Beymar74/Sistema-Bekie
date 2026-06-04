@@ -86,7 +86,7 @@ export default function RobotPage() {
               Volver al editor
             </Link>
             <h1 className="text-2xl font-bold tracking-tight text-gray-900">Dashboard del robot</h1>
-            <p className="text-sm text-gray-500 mt-0.5 font-mono">ESP32-ROVER-01</p>
+            <p className="text-sm text-gray-500 mt-0.5 font-mono">ESP32-BEKIE</p>
           </div>
 
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono ${
