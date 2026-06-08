@@ -2,6 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import {
   HouseSimple,
   SquaresFour,
@@ -16,10 +17,20 @@ interface AppNavProps {
 }
 
 export default function AppNav({
-  userName = "Estudiante",
+  userName: propUserName = "Estudiante",
   role = "student",
 }: AppNavProps) {
   const pathname = usePathname();
+  const [userName, setUserName] = useState(propUserName);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedName = localStorage.getItem("bekie-user-name");
+      if (storedName) {
+        setUserName(storedName);
+      }
+    }
+  }, [propUserName]);
 
   const isActive = (path: string) =>
     pathname === path || pathname.startsWith(path + "/");

@@ -17,13 +17,11 @@ import {
   ArrowLeft,
   CheckCircle,
   Code,
-  Cpu,
   Plus,
   Trash,
   Warning,
   X,
 } from "@phosphor-icons/react";
-import { LEVEL_2_STAGES } from "@/lib/nivel-1";
 import { saveRobotLoadPayload } from "@/lib/progress";
 import {
   type BlockType,
@@ -173,6 +171,9 @@ export default function IntermediateLevelEditor({
     issues: [],
     highlightIndexes: [],
   });
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [executionTrace, setExecutionTrace] = useState<string[]>([]);
   const [tutorialVisible, setTutorialVisible] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [scenarioIntroVisible, setScenarioIntroVisible] = useState(true);
@@ -187,7 +188,6 @@ export default function IntermediateLevelEditor({
   const paletteRef = useRef<HTMLDivElement | null>(null);
   const programRef = useRef<HTMLDivElement | null>(null);
   const compileRef = useRef<HTMLButtonElement | null>(null);
-  const loadRef = useRef<HTMLButtonElement | null>(null);
 
   const normalizeStepCount = useCallback((value: number) => {
     if (!Number.isFinite(value)) return 1;
@@ -224,6 +224,7 @@ export default function IntermediateLevelEditor({
         ...def,
         id: `b_${next.length + 1}_${Date.now()}`,
         ...(def.type === "FORWARD" ? { steps: 1 } : {}),
+        ...(def.type === "REPEAT" ? { steps: 4 } : {}),
       });
       return next;
     });
@@ -278,6 +279,7 @@ export default function IntermediateLevelEditor({
         ...def,
         id: `b_${current.length + 1}_${Date.now()}`,
         ...(def.type === "FORWARD" ? { steps: 1 } : {}),
+        ...(def.type === "REPEAT" ? { steps: 4 } : {}),
       },
     ]);
     setCompilerResult({
@@ -296,10 +298,13 @@ export default function IntermediateLevelEditor({
       const block = current[index];
       const removeCount =
         block.type === "IF_OBS_ELSE"
-          ? current[index + 1]?.type === "WHILE_GOAL" || current[index + 2]?.type === "WHILE_GOAL"
+          ? current[index + 1]?.type === "WHILE_GOAL" ||
+            current[index + 1]?.type === "REPEAT" ||
+            current[index + 2]?.type === "WHILE_GOAL" ||
+            current[index + 2]?.type === "REPEAT"
             ? current.length - index
             : 3
-          : block.type === "WHILE_GOAL"
+          : block.type === "WHILE_GOAL" || block.type === "REPEAT"
           ? current.length - index
           : 1;
       return current.filter((_, currentIndex) => currentIndex < index || currentIndex >= index + removeCount);
@@ -502,10 +507,15 @@ export default function IntermediateLevelEditor({
             ifIndex: index + 1,
             elseBranch,
             elseIndex: index + 2,
-            ifLoopBody: ifBranch?.type === "WHILE_GOAL" ? loopBody : undefined,
-            elseLoopBody: elseBranch?.type === "WHILE_GOAL" ? loopBody : undefined,
+            ifLoopBody: ifBranch?.type === "WHILE_GOAL" || ifBranch?.type === "REPEAT" ? loopBody : undefined,
+            elseLoopBody: elseBranch?.type === "WHILE_GOAL" || elseBranch?.type === "REPEAT" ? loopBody : undefined,
           });
-          if (ifBranch?.type === "WHILE_GOAL" || elseBranch?.type === "WHILE_GOAL") {
+          if (
+            ifBranch?.type === "WHILE_GOAL" ||
+            ifBranch?.type === "REPEAT" ||
+            elseBranch?.type === "WHILE_GOAL" ||
+            elseBranch?.type === "REPEAT"
+          ) {
             if (loopEndIndex > index) {
               index = loopEndIndex - 1;
             }
@@ -516,7 +526,7 @@ export default function IntermediateLevelEditor({
           continue;
         }
 
-        if (block.type === "WHILE_GOAL") {
+        if (block.type === "WHILE_GOAL" || block.type === "REPEAT") {
           const loopEndIndex = stopIndex !== -1 && stopIndex > index ? stopIndex : endIndex;
           items.push({
             kind: "loop",
@@ -690,6 +700,38 @@ export default function IntermediateLevelEditor({
               Repite lo de abajo
             </span>
           </div>
+          {block.type === "REPEAT" && (
+            <label
+              className="flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-[10px] font-mono text-indigo-700 mr-2"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <span>N</span>
+              <input
+                type="number"
+                min={1}
+                max={9}
+                step={1}
+                value={normalizeStepCount(block.steps ?? 4)}
+                onChange={(event) => {
+                  const nextSteps = normalizeStepCount(Number(event.target.value));
+                  setProgram((current) =>
+                    current.map((currentBlock) =>
+                      currentBlock.id === block.id
+                        ? { ...currentBlock, steps: nextSteps }
+                        : currentBlock
+                    )
+                  );
+                  setCompilerResult({
+                    status: "idle",
+                    message: "La secuencia cambio. Vuelve a compilar para validar la nueva version.",
+                    issues: [],
+                    highlightIndexes: [],
+                  });
+                }}
+                className="w-9 bg-transparent text-center text-[10px] font-mono outline-none"
+              />
+            </label>
+          )}
           <button
             type="button"
             onClick={() => removeBlock(block.id)}
@@ -701,8 +743,10 @@ export default function IntermediateLevelEditor({
 
         <div className="px-3 pb-3">
           <div className="rounded-lg border border-white/70 bg-white/75 p-2.5">
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-violet-600">
-              Mientras no llegue
+            <div className={`mb-2 flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider ${
+              block.type === "REPEAT" ? "text-indigo-600" : "text-violet-600"
+            }`}>
+              {block.type === "REPEAT" ? "Repetir N veces" : "Mientras no llegue"}
             </div>
             {bodyChildren.length > 0 ? (
               <div className="flex flex-col gap-1.5">
@@ -800,7 +844,7 @@ export default function IntermediateLevelEditor({
                   Si hay obstaculo
                 </div>
                 {item.ifBranch ? (
-                  item.ifBranch.type === "WHILE_GOAL" ? (
+                  item.ifBranch.type === "WHILE_GOAL" || item.ifBranch.type === "REPEAT" ? (
                     renderLoopCard(
                       item.ifBranch,
                       item.ifIndex ?? item.index + 1,
@@ -849,7 +893,7 @@ export default function IntermediateLevelEditor({
                   Si no hay obstaculo
                 </div>
                 {item.elseBranch ? (
-                  item.elseBranch.type === "WHILE_GOAL" ? (
+                  item.elseBranch.type === "WHILE_GOAL" || item.elseBranch.type === "REPEAT" ? (
                     renderLoopCard(
                       item.elseBranch,
                       item.elseIndex ?? item.index + 2,
@@ -942,13 +986,25 @@ export default function IntermediateLevelEditor({
       pushIssue("En este nivel no se usa el bloque Si hay obstaculo sin la rama libre.");
     }
 
-    if (countBlocks("IF_OBS_ELSE") !== 1) {
-      pushIssue("Cada mision de este nivel necesita exactamente un bloque Si hay obstaculo / Si no hay obstaculo.");
+    if (stage.id <= 3) {
+      if (countBlocks("IF_OBS_ELSE") !== 1) {
+        pushIssue("Cada mision de este nivel necesita exactamente un bloque Si hay obstaculo / Si no hay obstaculo.");
+      }
+      if (countBlocks("REPEAT") > 0) {
+        pushIssue("En estas misiones iniciales no se usa el bloque Repetir N veces.");
+      }
+    } else {
+      if (countBlocks("REPEAT") < 1) {
+        pushIssue("Cada mision de este subnivel necesita al menos un bloque Repetir N veces.");
+      }
+      if (countBlocks("IF_OBS_ELSE") > 0) {
+        pushIssue("En estas misiones de bucles no se usa el bloque Si hay obstaculo / Si no hay obstaculo.");
+      }
     }
 
     if (countBlocks("WHILE_GOAL") > 0) {
       pushIssue(
-        "En este nivel solo se usa Si hay obstaculo / Si no hay obstaculo. Quita Mientras no llegue."
+        "En este nivel solo se usa Repetir N veces. Quita Mientras no llegue de la secuencia."
       );
     }
 
@@ -962,16 +1018,14 @@ export default function IntermediateLevelEditor({
     }
 
     program.forEach((block, index) => {
-      if (block.type === "FORWARD" || block.type === "BACKWARD") {
-        if (!Number.isInteger(block.steps ?? 1) || (block.steps ?? 1) < 1) {
+      if (block.type === "FORWARD" || block.type === "BACKWARD" || block.type === "REPEAT") {
+        const defaultSteps = block.type === "REPEAT" ? 4 : 1;
+        if (!Number.isInteger(block.steps ?? defaultSteps) || (block.steps ?? defaultSteps) < 1) {
           pushIssue(`El bloque "${BLOCK_LABELS[block.type]}" necesita un numero mayor que 0.`, index);
         }
       }
     });
 
-    const executionBlocks = program.filter((block) => block.type !== "INIT");
-    const stopIndex = executionBlocks.findIndex((block) => block.type === "STOP");
-    const loopExitIndex = stopIndex !== -1 ? stopIndex : executionBlocks.length;
     const MAX_STEPS = 220;
     const MAX_LOOPS = 10;
     const DIR_DELTA: [number, number][] = [
@@ -1015,155 +1069,176 @@ export default function IntermediateLevelEditor({
       }
       return [...config.start] as [number, number];
     };
+
     let pos: [number, number] = findStartPos();
     let dir: Dir = config.startDir;
     let sensors = readSensors(pos, dir);
-    let stepIdx = 0;
     let stepCount = 0;
-    let loopCount = 0;
-    let loopStartIndex: number | null = null;
-    let skipAfterBranch = 0;
     let evaluationMessage = "El programa no llega a la meta.";
 
-    while (stepCount++ <= MAX_STEPS) {
-      if (stepIdx >= executionBlocks.length) {
-        if (getCell(pos) === 3) {
-          evaluationMessage = "La secuencia llega a la meta correctamente.";
-          break;
+    const trace: string[] = ["Iniciar mision"];
+
+    // A helper to execute a list of ProgramViewItem
+    const executeItems = (items: ProgramViewItem[]): boolean => {
+      for (const item of items) {
+        if (evaluationMessage !== "El programa no llega a la meta." && evaluationMessage !== "La secuencia llega a la meta correctamente.") {
+          return true; // Stop execution
         }
-        evaluationMessage = "El programa no llega a la meta.";
-        break;
-      }
 
-      const block = executionBlocks[stepIdx++];
-      if (!block) {
-        evaluationMessage = "La secuencia tiene un bloque incompleto.";
-        break;
-      }
+        if (item.kind === "block") {
+          const block = item.block;
+          if (block.type === "INIT") {
+            continue;
+          }
+          if (block.type === "STOP") {
+            trace.push(block.label);
+            if (getCell(pos) === 3) {
+              evaluationMessage = "La secuencia llega a la meta correctamente.";
+            } else {
+              evaluationMessage = "El robot se detuvo antes de llegar a la meta.";
+            }
+            return true; // Stop execution
+          }
 
-      let jumpToNextTick = false;
+          const blockLabel = block.label;
+          if (block.type === "FORWARD") {
+            if ((block.steps ?? 1) > 1) {
+              trace.push(`${blockLabel} (N=${block.steps})`);
+            } else {
+              trace.push(blockLabel);
+            }
 
-      switch (block.type as BlockType) {
-        case "FORWARD": {
-          for (let step = 0; step < normalizeStepCount(block.steps ?? 1); step += 1) {
-            const moved = moveRobot(pos, dir);
-            pos = moved.nextPos;
+            let collision = false;
+            for (let step = 0; step < normalizeStepCount(block.steps ?? 1); step += 1) {
+              stepCount += 1;
+              if (stepCount > MAX_STEPS) {
+                evaluationMessage = "El programa alcanzo el limite maximo de pasos.";
+                collision = true;
+                break;
+              }
+              const moved = moveRobot(pos, dir);
+              pos = moved.nextPos;
+              sensors = readSensors(pos, dir);
+              if (moved.status === "collision") {
+                evaluationMessage = "El robot choco con un obstaculo.";
+                collision = true;
+                break;
+              }
+              if (moved.status === "oob") {
+                evaluationMessage = "El robot salio del area permitida.";
+                collision = true;
+                break;
+              }
+            }
+            if (collision) return true;
+          } else if (block.type === "BACKWARD") {
+            if ((block.steps ?? 1) > 1) {
+              trace.push(`${blockLabel} (N=${block.steps})`);
+            } else {
+              trace.push(blockLabel);
+            }
+
+            let collision = false;
+            const backDir = ((dir + 2) % 4) as Dir;
+            for (let step = 0; step < normalizeStepCount(block.steps ?? 1); step += 1) {
+              stepCount += 1;
+              if (stepCount > MAX_STEPS) {
+                evaluationMessage = "El programa alcanzo el limite maximo de pasos.";
+                collision = true;
+                break;
+              }
+              const moved = moveRobot(pos, backDir);
+              pos = moved.nextPos;
+              sensors = readSensors(pos, dir);
+              if (moved.status === "collision") {
+                evaluationMessage = "El robot choco retrocediendo.";
+                collision = true;
+                break;
+              }
+              if (moved.status === "oob") {
+                evaluationMessage = "El robot salio del area permitida al retroceder.";
+                collision = true;
+                break;
+              }
+            }
+            if (collision) return true;
+          } else if (block.type === "TURN_RIGHT") {
+            trace.push(blockLabel);
+            stepCount += 1;
+            dir = ((dir + 1) % 4) as Dir;
             sensors = readSensors(pos, dir);
-            if (moved.status === "collision") {
-              evaluationMessage = "El robot choco con un obstaculo.";
-              break;
-            }
-            if (moved.status === "oob") {
-              evaluationMessage = "El robot salio del area permitida.";
-              break;
-            }
-          }
-          if (evaluationMessage !== "El programa no llega a la meta.") {
-            break;
-          }
-          break;
-        }
-        case "BACKWARD": {
-          const backDir = ((dir + 2) % 4) as Dir;
-          for (let step = 0; step < normalizeStepCount(block.steps ?? 1); step += 1) {
-            const moved = moveRobot(pos, backDir);
-            pos = moved.nextPos;
+          } else if (block.type === "TURN_LEFT") {
+            trace.push(blockLabel);
+            stepCount += 1;
+            dir = ((dir + 3) % 4) as Dir;
             sensors = readSensors(pos, dir);
-            if (moved.status === "collision") {
-              evaluationMessage = "El robot choco retrocediendo.";
-              break;
-            }
-            if (moved.status === "oob") {
-              evaluationMessage = "El robot salio del area permitida al retroceder.";
-              break;
-            }
+          } else if (block.type === "WAIT") {
+            trace.push(blockLabel);
+            stepCount += 1;
           }
-          if (evaluationMessage !== "El programa no llega a la meta.") {
-            break;
-          }
-          break;
-        }
-        case "TURN_RIGHT":
-          dir = ((dir + 1) % 4) as Dir;
-          sensors = readSensors(pos, dir);
-          break;
-        case "TURN_LEFT":
-          dir = ((dir + 3) % 4) as Dir;
-          sensors = readSensors(pos, dir);
-          break;
-        case "WAIT":
-          break;
-        case "STOP":
-          if (getCell(pos) === 3) {
-            evaluationMessage = "La secuencia llega a la meta correctamente.";
-          } else {
-            evaluationMessage = "El robot se detuvo antes de llegar a la meta.";
-          }
-          jumpToNextTick = true;
-          break;
-        case "IF_OBS_ELSE":
+        } else if (item.kind === "conditional") {
+          stepCount += 1;
+          trace.push(sensors.obstacleAhead ? "Si hay obstaculo" : "Si no hay obstaculo");
+
           if (sensors.obstacleAhead) {
-            skipAfterBranch = 1;
+            if (item.ifBranch) {
+              if (item.ifBranch.type === "WHILE_GOAL" || item.ifBranch.type === "REPEAT") {
+                const body = item.ifLoopBody ?? [];
+                const done = executeLoop(item.ifBranch, body);
+                if (done) return true;
+              } else {
+                const done = executeSingleBlock(item.ifBranch);
+                if (done) return true;
+              }
+            }
           } else {
-            stepIdx += 1;
+            if (item.elseBranch) {
+              if (item.elseBranch.type === "WHILE_GOAL" || item.elseBranch.type === "REPEAT") {
+                const body = item.elseLoopBody ?? [];
+                const done = executeLoop(item.elseBranch, body);
+                if (done) return true;
+              } else {
+                const done = executeSingleBlock(item.elseBranch);
+                if (done) return true;
+              }
+            }
           }
-          jumpToNextTick = true;
-          break;
-        case "WHILE_GOAL":
-          loopStartIndex = stepIdx;
-          jumpToNextTick = true;
-          break;
-        case "INIT":
-          break;
-        default:
-          break;
-      }
-
-      if (evaluationMessage === "El robot choco con un obstaculo." || evaluationMessage === "El robot salio del area permitida." || evaluationMessage === "El robot choco retrocediendo." || evaluationMessage === "El robot salio del area permitida al retroceder.") {
-        break;
-      }
-
-      if (jumpToNextTick) {
-        continue;
-      }
-
-      if (skipAfterBranch > 0) {
-        stepIdx += skipAfterBranch;
-        skipAfterBranch = 0;
-      }
-
-      if (loopStartIndex !== null && stepIdx === loopExitIndex && getCell(pos) !== 3) {
-        loopCount += 1;
-        if (loopCount > MAX_LOOPS) {
-          evaluationMessage = "El bucle alcanzo el limite permitido sin llegar a la meta.";
-          break;
+        } else if (item.kind === "loop") {
+          const done = executeLoop(item.block, item.body);
+          if (done) return true;
         }
-
-        stepIdx = loopStartIndex;
-        continue;
       }
+      return false;
+    };
 
-      if (stepIdx >= executionBlocks.length) {
-        if (getCell(pos) === 3) {
-          evaluationMessage = "La secuencia llega a la meta correctamente.";
-          break;
-        }
+    const executeSingleBlock = (block: Block): boolean => {
+      return executeItems([{ kind: "block", block, index: -1 }]);
+    };
 
-        if (loopStartIndex !== null) {
+    const executeLoop = (block: Block, body: ProgramViewItem[]): boolean => {
+      if (block.type === "WHILE_GOAL") {
+        let loopCount = 0;
+        while (getCell(pos) !== 3) {
           loopCount += 1;
           if (loopCount > MAX_LOOPS) {
             evaluationMessage = "El bucle alcanzo el limite permitido sin llegar a la meta.";
-            break;
+            return true;
           }
-
-          stepIdx = loopStartIndex;
-          continue;
+          const done = executeItems(body);
+          if (done) return true;
         }
-
-        evaluationMessage = "El programa no llega a la meta.";
-        break;
+      } else if (block.type === "REPEAT") {
+        const reps = normalizeStepCount(block.steps ?? 4);
+        for (let i = 0; i < reps; i++) {
+          const done = executeItems(body);
+          if (done) return true;
+        }
       }
-    }
+      return false;
+    };
+
+    // Run the structured interpreter
+    executeItems(programView);
 
     if (issues.length === 0) {
       if (getCell(pos) === 3) {
@@ -1181,6 +1256,9 @@ export default function IntermediateLevelEditor({
           ],
           highlightIndexes: [],
         });
+
+        setExecutionTrace(trace);
+        setShowSuccessModal(true);
 
         if (showTutorial && tutorialVisible && tutorialStep === 5) {
           setTutorialStep(6);
@@ -1205,6 +1283,7 @@ export default function IntermediateLevelEditor({
       issues,
       highlightIndexes,
     });
+    setShowErrorModal(true);
   }, [
     canCompile,
     config.start,
@@ -1212,6 +1291,7 @@ export default function IntermediateLevelEditor({
     missionIndex,
     normalizeStepCount,
     program,
+    programView,
     showTutorial,
     stage.id,
     stage.grid,
@@ -1219,20 +1299,6 @@ export default function IntermediateLevelEditor({
     tutorialVisible,
   ]);
 
-  const robotTransferCommands = useMemo(
-    () =>
-      program.map((block) => {
-        const label = BLOCK_LABELS[block.type] ?? block.label;
-        if (
-          (block.type === "FORWARD" || block.type === "BACKWARD") &&
-          (block.steps ?? 1) > 1
-        ) {
-          return `${label} (N=${block.steps})`;
-        }
-        return label;
-      }),
-    [program]
-  );
 
   const goToRobot = () => {
     if (compilerResult.status !== "success") {
@@ -1248,7 +1314,7 @@ export default function IntermediateLevelEditor({
       levelKey: "2",
       missionIndex,
       missionTitle: stage.title,
-      commands: robotTransferCommands,
+      commands: executionTrace,
     });
 
     router.push(`/levels/2/load?mission=${missionIndex}`);
@@ -1269,11 +1335,19 @@ export default function IntermediateLevelEditor({
       }
 
       if (stage.id === 4) {
-        return "En esta misión usa Si hay obstaculo / Si no hay obstaculo y varios Avanzar sueltos en linea recta. Cuenta las casillas del pasillo.";
+        return "En esta misión usa Repetir N veces con N=4 para subir la escalera. Coloca dentro del bucle: Avanzar, Girar derecha, Avanzar y Girar izquierda.";
       }
 
       if (stage.id === 5) {
-        return "En esta misión combina Si hay obstaculo / Si no hay obstaculo con un zigzag de giros y avances. El tramo final usa Avanzar sueltos hasta la meta.";
+        return "En esta misión usa Repetir N veces para avanzar 4 celdas, gira a la derecha y usa otro bloque Repetir N veces con N=4 para llegar a la meta.";
+      }
+
+      if (stage.id === 6) {
+        return "En esta misión usa tres bloques Repetir N veces: uno de N=4 para el primer tramo largo, gira a la derecha, otro de N=4 para el segundo tramo, gira a la derecha, y otro de N=2 para el último tramo.";
+      }
+
+      if (stage.id === 7) {
+        return "En esta misión combina avances simples con varios bloques Repetir N veces para sortear el doble zigzag y alcanzar la meta.";
       }
 
       return "La mision requiere una secuencia mas completa y ordenada.";
@@ -1326,7 +1400,6 @@ export default function IntermediateLevelEditor({
     showTutorial && tutorialVisible && (tutorialStep === 2 || tutorialStep === 3);
   const isStopPaletteHighlighted = showTutorial && tutorialVisible && tutorialStep === 4;
   const isCompileButtonHighlighted = showTutorial && tutorialVisible && tutorialStep === 5;
-  const isLoadButtonHighlighted = showTutorial && tutorialVisible && tutorialStep === 6;
   const isTutorialButtonSpotlight = tutorialStep === 5 || tutorialStep === 6;
 
   return (
@@ -1345,6 +1418,16 @@ export default function IntermediateLevelEditor({
           {config.level} - {config.levelSlug} / Compilador
         </span>
         <div className="flex items-center gap-2">
+          {compilerResult.status === "error" && (
+            <button
+              type="button"
+              onClick={() => setShowErrorModal(true)}
+              className="btn-press flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-105 transition-colors"
+            >
+              <Warning size={13} weight="fill" className="text-red-500" />
+              Ver errores ({compilerResult.issues.length})
+            </button>
+          )}
           <button
             onClick={clearProgram}
             className="btn-press flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors"
@@ -1367,22 +1450,6 @@ export default function IntermediateLevelEditor({
           >
             <Code size={13} weight="bold" />
             Compilar
-          </button>
-          <button
-            id="btn-load"
-            ref={loadRef}
-            onClick={goToRobot}
-            disabled={compilerResult.status !== "success"}
-            className={`btn-press flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all duration-300 ${
-              isLoadButtonHighlighted
-                ? "bg-emerald-500 ring-4 ring-emerald-400 ring-offset-2 animate-pulse scale-105 z-50 relative border-2 border-white shadow-xl text-white"
-                : compilerResult.status === "success"
-                ? "bg-emerald-500 text-white hover:bg-emerald-400"
-                : "bg-gray-200 text-gray-400 cursor-not-allowed"
-            }`}
-          >
-            <Cpu size={13} weight="duotone" />
-            Cargar
           </button>
         </div>
       </div>
@@ -1645,6 +1712,102 @@ export default function IntermediateLevelEditor({
           </div>
         </div>
       </div>
+
+      {/* Modal de Errores de Compilación */}
+      {showErrorModal && compilerResult.status === "error" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/50 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-lg bg-white rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col p-6 transition-all duration-300">
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-red-600 font-bold">
+                <Warning size={20} weight="fill" />
+                <h3 className="text-base font-bold">Errores de compilación</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowErrorModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="py-4 flex-1 overflow-y-auto max-h-[350px]">
+              <p className="text-[11px] text-gray-400 mb-3 uppercase tracking-wider font-mono">
+                Detalles de los problemas encontrados
+              </p>
+              <ul className="space-y-2.5">
+                {compilerResult.issues.map((issue, index) => (
+                  <li key={`${index}-${issue.message}`} className="flex gap-2.5 text-xs text-gray-700 bg-red-50/50 p-3.5 rounded-2xl border border-red-100">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                    <span className="font-mono leading-relaxed">{issue.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            <div className="pt-3.5 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowErrorModal(false)}
+                className="btn-press bg-red-600 hover:bg-red-700 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-lg transition-all duration-200"
+              >
+                Entendido, voy a corregir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Compilación Exitosa */}
+      {showSuccessModal && compilerResult.status === "success" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/50 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-lg bg-white rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col p-6 transition-all duration-300">
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-emerald-600 font-bold">
+                <CheckCircle size={20} weight="fill" />
+                <h3 className="text-base font-bold">¡Compilación Exitosa!</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSuccessModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="py-5 text-center flex flex-col items-center">
+              <div className="w-16 h-16 bg-emerald-50 border border-emerald-200 rounded-full flex items-center justify-center text-emerald-600 mb-4 animate-pulse">
+                <CheckCircle size={36} weight="duotone" />
+              </div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">El programa cumple con el escenario</h4>
+              <p className="text-xs text-gray-500 max-w-sm leading-relaxed">
+                Tu secuencia ha sido verificada y no presenta errores de lógica. Está lista para ser transmitida al robot físico por Bluetooth.
+              </p>
+            </div>
+            
+            <div className="pt-3.5 border-t border-gray-100 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowSuccessModal(false)}
+                className="btn-press border border-gray-200 hover:bg-gray-50 text-gray-600 font-semibold text-xs px-5 py-2.5 rounded-xl transition-all duration-200"
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  goToRobot();
+                }}
+                className="btn-press bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-lg transition-all duration-200"
+              >
+                Cargar al Robot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showTutorial && tutorialVisible && targetRect && (
         <div

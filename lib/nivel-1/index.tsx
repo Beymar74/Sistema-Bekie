@@ -1,4 +1,4 @@
-import { CheckCircle, Cpu, Warning } from "@phosphor-icons/react";
+import { CheckCircle, Cpu, Warning, Repeat } from "@phosphor-icons/react";
 import { BASIC_PALETTE, type EditorLevelContent, type MissionContent, type MissionStage } from "@/lib/levels";
 
 const INTERMEDIATE_PALETTE = [
@@ -12,6 +12,12 @@ const INTERMEDIATE_PALETTE = [
         <CheckCircle size={14} weight="fill" />
       </span>
     ),
+  },
+  {
+    type: "REPEAT",
+    label: "Repetir N veces",
+    colorClass: "border-indigo-300 bg-indigo-50 text-indigo-700",
+    icon: <Repeat size={14} weight="bold" />,
   },
 ] satisfies EditorLevelContent["palette"];
 
@@ -35,7 +41,7 @@ export const LEVEL_2_STAGES: MissionStage[] = [
     requiredSequence: ["INIT", "IF_OBS_ELSE", "TURN_RIGHT", "FORWARD", "FORWARD", "STOP"],
     learningOutcomes: [
       "Usar una sola estructura if/else para dos respuestas distintas.",
-      "Responder con un giro si hay obstaculo y con un avance numerado si el camino esta libre.",
+      "Responder con un giro si hay obstaculo y con un avance libre si el camino esta libre.",
       "Usar un avance simple fuera de la condicion para alcanzar la meta.",
     ],
     instructions: [
@@ -94,14 +100,13 @@ export const LEVEL_2_STAGES: MissionStage[] = [
       "Resuelve un desvio corto con una sola decision antes de entrar al pasillo final.",
     summary:
       "La ruta obliga a decidir al inicio y luego avanzar por un corredor en L hasta la meta.",
-    scenarioLabel: "Escenario 3 / 6x6",
+    scenarioLabel: "Escenario 3 / 5x5",
     grid: [
-      [0, 0, 2, 1, 0, 1],
-      [0, 1, 0, 0, 0, 3],
-      [0, 0, 1, 1, 1, 1],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
+      [0, 2, 1, 0, 0],
+      [0, 1, 0, 0, 3],
+      [0, 0, 1, 1, 1],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
     ],
     requiredSequence: [
       "INIT",
@@ -135,128 +140,176 @@ export const LEVEL_2_STAGES: MissionStage[] = [
   },
   {
     id: 4,
-    title: "Ruta larga",
-    difficulty: "Alta",
-    objective:
-      "Combina una condicion inicial con varios avances rectos para recorrer un pasillo largo hasta la meta.",
-    summary:
-      "El robot corrige el desvio con una decision y luego avanza varias casillas en linea recta hasta la meta inferior.",
-    scenarioLabel: "Escenario 4 / 5x5",
+    title: "Introducción al bucle for",
+    difficulty: "Basica",
+    objective: "Aprende a usar un bucle For para repetir una accion un numero exacto de veces.",
+    summary: "Tutorial guiado: en lugar de escribir muchos bloques redundantes, usaras un For con N=4 para subir la escalera.",
+    scenarioLabel: "Escenario 4 / Tutorial Bucles",
     grid: [
-      [2, 1, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [3, 0, 0, 0, 0],
+      [2, 0, 1, 1, 1],
+      [1, 0, 0, 1, 1],
+      [1, 1, 0, 0, 1],
+      [1, 1, 1, 0, 0],
+      [1, 1, 1, 1, 3],
     ],
-    requiredSequence: [
-      "INIT",
-      "IF_OBS_ELSE",
-      "TURN_RIGHT",
-      "TURN_LEFT",
-      "FORWARD",
-      "FORWARD",
-      "FORWARD",
-      "FORWARD",
-      "STOP",
-    ],
+    requiredSequence: ["INIT", "REPEAT", "FORWARD", "TURN_RIGHT", "FORWARD", "TURN_LEFT", "STOP"],
     learningOutcomes: [
-      "Usar una condicion para corregir la salida inicial.",
-      "Encadenar varios avances despues de la decision.",
-      "Contar cuantas casillas debe avanzar el robot en linea recta.",
+      "Usar bucles For para repeticion fija.",
+      "Configurar el parametro N en un bucle.",
+      "Optimizar codigo secuencial.",
     ],
     instructions: [
-      "Usa Si hay obstaculo / Si no hay obstaculo para corregir la salida inicial.",
-      "Despues de la decision, agrega los Avanzar necesarios en linea recta hasta la meta de abajo.",
-      "Cada Avanzar suelto mueve una casilla; cuenta el pasillo antes de compilar.",
-      "Cierra con Detener al final.",
+      "Coloca el bloque Repetir N veces y configuralo en N=4.",
+      "Agrega dentro del bucle: Avanzar, Girar derecha, Avanzar y Girar izquierda.",
+      "Cierra el programa con Detener.",
+      "Verifica en la simulacion que el robot logre subir las escaleras.",
     ],
-    victory:
-      "La secuencia debe abrirse con una decision y cerrar con cuatro avances rectos que lleven al robot hasta la meta inferior.",
+    victory: "El robot debe llegar a la meta usando un bucle For configurado en 4 iteraciones.",
     tips: [
-      "La rama correcta de la condicion te deja mirando hacia el pasillo.",
-      "Cuenta las casillas libres entre el desvio y la meta.",
-      "Detener debe quedar al final como salida segura del programa.",
+      "Haz clic en el numero del bloque For para cambiar el valor de N.",
+      "Los bloques dentro de 'Repetir N veces' se ejecutaran consecutivamente.",
     ],
   },
   {
     id: 5,
-    title: "Desafio final",
-    difficulty: "Final",
-    objective:
-      "Cierra el nivel con una condicion inicial y una ruta en zigzag hecha solo con giros y avances.",
-    summary:
-      "La ruta final combina un zigzag corto con un tramo recto final hasta la meta, usando solo if/else y movimiento.",
-    scenarioLabel: "Escenario 5 / 6x6",
+    title: "Esquina con for",
+    difficulty: "Basica",
+    objective: "Usa un bucle For para avanzar una distancia larga y luego realiza un giro para llegar a la meta.",
+    summary: "Avanza por un pasillo recto usando repeticion y luego gira hacia la meta lateral.",
+    scenarioLabel: "Escenario 5 / 5x5",
     grid: [
-      [2, 1, 0, 1, 0, 0],
-      [0, 0, 0, 1, 0, 0],
-      [0, 0, 0, 0, 3, 0],
-      [1, 1, 1, 1, 1, 0],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
+      [2, 0, 0, 0, 0],
+      [1, 1, 1, 1, 0],
+      [1, 1, 1, 1, 0],
+      [1, 1, 1, 1, 0],
+      [1, 1, 1, 1, 3],
+    ],
+    requiredSequence: ["INIT", "REPEAT", "FORWARD", "TURN_RIGHT", "REPEAT", "FORWARD", "STOP"],
+    learningOutcomes: [
+      "Combinar multiples bucles For en la misma secuencia.",
+      "Calcular iteraciones exactas para girar en esquinas.",
+    ],
+    instructions: [
+      "Avanza 4 celdas usando un bucle For.",
+      "Gira a la derecha y luego avanza otras 4 celdas usando otro bucle For.",
+      "Termina el programa con Detener sobre la meta.",
+    ],
+    victory: "El robot alcanza la esquina inferior derecha del tablero usando bucles.",
+    tips: [
+      "Usa la cantidad exacta de pasos N en cada bucle.",
+    ],
+  },
+  {
+    id: 6,
+    title: "Laberinto en U",
+    difficulty: "Alta",
+    objective: "Supera un corredor largo en forma de U usando bucles optimizados.",
+    summary: "Recorre dos tramos largos y uno corto para sortear las paredes externas en U del laberinto.",
+    scenarioLabel: "Escenario 6 / U 5x5",
+    grid: [
+      [2, 0, 0, 0, 0],
+      [1, 1, 1, 1, 0],
+      [0, 0, 0, 1, 0],
+      [0, 1, 1, 1, 0],
+      [0, 1, 3, 0, 0],
     ],
     requiredSequence: [
       "INIT",
-      "IF_OBS_ELSE",
-      "TURN_RIGHT",
-      "TURN_LEFT",
-      "FORWARD",
-      "TURN_LEFT",
-      "FORWARD",
-      "TURN_RIGHT",
-      "FORWARD",
-      "TURN_LEFT",
-      "FORWARD",
-      "FORWARD",
-      "FORWARD",
-      "STOP",
+      "REPEAT", "FORWARD", "TURN_RIGHT",
+      "REPEAT", "FORWARD", "TURN_RIGHT",
+      "REPEAT", "FORWARD",
+      "STOP"
     ],
     learningOutcomes: [
-      "Unir una condicion inicial con una ruta larga de giros y avances.",
-      "Resolver una ruta en zigzag sin perder el orden de las acciones.",
-      "Completar el tramo recto final con los avances exactos.",
+      "Resolver trayectos en forma de U con la menor cantidad de bloques.",
+      "Calcular distancias de avance en corredores paralelos.",
+      "Utilizar la simulacion 2D para ajustar el valor de N."
     ],
     instructions: [
-      "Primero resuelve la salida con Si hay obstaculo / Si no hay obstaculo.",
-      "Luego encadena el zigzag con giros alternados y avances de una casilla.",
-      "Al final agrega los Avanzar rectos que faltan para llegar a la meta.",
-      "Cierra con Detener.",
+      "Inicia con el bloque de entrada.",
+      "Avanza 4 celdas a la derecha con un bucle N=4 y gira a la derecha.",
+      "Avanza 4 celdas hacia abajo con un bucle N=4 y gira a la derecha.",
+      "Avanza 2 celdas a la izquierda con un bucle N=2 para llegar al punto META.",
+      "Coloca Detener al final del recorrido."
     ],
-    victory:
-      "La secuencia final debe mezclar una decision inicial, un zigzag corto y avances rectos finales que lleven la ruta hasta la meta.",
+    victory: "El robot recorre el canal en U y se detiene exactamente en la meta.",
     tips: [
-      "El orden de los bloques importa mucho mas que en las misiones anteriores.",
-      "Busca una ruta base que termine apuntando directo a la meta.",
-      "Cuenta los avances del tramo final sin usar bucles.",
-    ],
+      "Observa que el primer tramo tiene 4 celdas libres, el segundo tiene 4 y el tercero tiene 2.",
+      "Asegurate de orientar al robot a la derecha antes de girar."
+    ]
   },
+  {
+    id: 7,
+    title: "Doble zigzag",
+    difficulty: "Final",
+    objective: "Domina el movimiento avanzado esquivando obstaculos en un doble zigzag de alta precision.",
+    summary: "Planifica una secuencia de giros alternados y bucles para sortear un pasillo de obstaculos dobles.",
+    scenarioLabel: "Escenario 7 / Zigzag 5x5",
+    grid: [
+      [2, 0, 1, 0, 0],
+      [1, 0, 0, 0, 1],
+      [1, 1, 1, 0, 1],
+      [1, 1, 1, 0, 1],
+      [1, 1, 1, 0, 3],
+    ],
+    requiredSequence: [
+      "INIT",
+      "FORWARD",
+      "TURN_RIGHT",
+      "REPEAT", "FORWARD",
+      "TURN_LEFT",
+      "REPEAT", "FORWARD",
+      "TURN_RIGHT",
+      "REPEAT", "FORWARD",
+      "TURN_LEFT",
+      "REPEAT", "FORWARD",
+      "STOP"
+    ],
+    learningOutcomes: [
+      "Estructurar trayectorias complejas con multiples giros alternados.",
+      "Combinar bloques de avance simple con bucles repetitivos.",
+      "Completar el nivel avanzado demostrando control total sobre el robot."
+    ],
+    instructions: [
+      "Inicia la secuencia.",
+      "Avanza 1 paso al frente y gira a la derecha.",
+      "Usa un bucle de N=1 para avanzar 1 paso, y gira a la izquierda.",
+      "Usa un bucle de N=2 para avanzar 2 pasos, y gira a la derecha.",
+      "Usa un bucle de N=3 para avanzar 3 pasos, y gira a la izquierda.",
+      "Usa un bucle de N=1 para avanzar 1 paso para llegar a la META.",
+      "Finaliza con Detener."
+    ],
+    victory: "El robot recorre el laberinto de doble zigzag completo sin tocar ningun obstaculo y finaliza en la meta.",
+    tips: [
+      "Dibuja o imagina la ruta en el simulador paso por paso.",
+      "Recuerda que cada giro cambia tu orientacion y determina la direccion del siguiente bucle."
+    ]
+  }
 ];
 
 export const LEVEL_MISSIONS: Record<"2", MissionContent> = {
   "2": {
     level: "Nivel 1",
     levelSlug: "Intermedio",
-    title: "Evadir obstaculos",
-    badge: "Condicionales",
+    title: "Evadir obstáculos y bucles",
+    badge: "Control",
     icon: <Cpu size={24} weight="duotone" />,
     accent: "violet",
     objective:
-      "Aprende a construir secuencias con condicionales if/else mientras el robot reacciona a los obstaculos y avanza hacia metas cada vez mas lejanas.",
+      "Aprende a construir secuencias con condicionales if/else y bucles repetitivos for mientras el robot reacciona a los obstáculos y optimiza su ruta.",
     learningOutcomes: [
-      "Usar una estructura if/else para responder a obstaculos.",
-      "Entender que la mision 1 es un tutorial guiado y que las siguientes ya se resuelven de forma autonoma.",
-      "Combinar condicion, correccion y avances encadenados paso a paso.",
+      "Usar una estructura if/else para responder a obstáculos.",
+      "Utilizar bucles repetitivos para automatizar trayectos constantes.",
+      "Combinar decisiones y bucles de forma óptima.",
     ],
     instructions: [
-      "La primera mision funciona como tutorial guiado; las siguientes ya no usan esa ayuda paso a paso.",
-      "Desde la mision 2, las rutas combinan condicionales y mas avances en linea recta.",
-      "Usa las decisiones para describir el comportamiento correcto del robot.",
-      "Cuando aparezca dentro de una rama, el numero en Avanzar define cuantas casillas recorrera el robot.",
+      "Las primeras misiones se enfocan en condicionales sencillos frente a obstáculos.",
+      "Las misiones avanzadas introducen el bloque Repetir N veces (bucle For) para optimizar tus secuencias.",
+      "Cuando aparezca dentro de una rama, el número en Avanzar define cuántas casillas recorrerá el robot.",
       "Compila la secuencia para comprobar que el robot realmente llega a la meta de cada escenario.",
     ],
     victory:
-      "La primera mision sirve de introduccion guiada. Despues, cada reto agrega un poco mas de complejidad hasta dominar condicionales y rutas largas.",
+      "Domina el uso de condicionales y bucles repetitivos para guiar al robot a través de escenarios complejos con obstáculos.",
     blocks: [
       "Iniciar mision",
       "Avanzar",
@@ -266,12 +319,12 @@ export const LEVEL_MISSIONS: Record<"2", MissionContent> = {
       "Esperar",
       "Detener",
       "Si hay obstaculo / Si no hay obstaculo",
+      "Repetir N veces",
     ],
     tips: [
-      "La primera mision se abre sola cuando completas el tutorial.",
-      "Esperar sigue siendo una pausa opcional, pero no es el centro del nivel.",
-      "El numero en Avanzar solo aparece dentro de ramas; fuera de una decision el bloque avanza una sola casilla.",
-      "Cada mision agrega un pequeno salto de dificultad para que el aprendizaje sea gradual.",
+      "Las misiones progresan de condicionales simples a bucles eficientes.",
+      "El bloque Repetir N veces repite las instrucciones que pongas dentro de él.",
+      "Puedes ajustar la cantidad de repeticiones N haciendo clic en el bloque.",
     ],
   },
 };
@@ -297,6 +350,6 @@ export const LEVEL_EDITORS: Record<"2", EditorLevelContent> = {
     startDir: 0,
     palette: [...BASIC_PALETTE, ...INTERMEDIATE_PALETTE],
     helperText:
-      "Compilador de decisiones: arma condicionales con dos respuestas, usa Avanzar numerado solo dentro de ramas y deja los Avanzar sueltos sin numero.",
+      "Compilador de decisiones y bucles: arma condicionales con if/else o bucles for para automatizar movimientos repetitivos.",
   },
 };

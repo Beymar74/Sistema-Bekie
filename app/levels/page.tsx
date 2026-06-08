@@ -10,7 +10,6 @@ import {
   Clock,
   Code,
   Cpu,
-  Repeat,
 } from "@phosphor-icons/react";
 import { LEVEL_2_STAGES } from "@/lib/nivel-1";
 import { LEVEL_0_STAGES } from "@/lib/nivel-0";
@@ -181,9 +180,7 @@ export default function LevelsPage() {
               </div>
 
               <p className="text-sm text-gray-600 leading-relaxed">
-                Condicionales if/else. El robot detecta el entorno internamente, pero aquí tú
-                programas una sola estructura con dos ramas para reaccionar frente a obstáculos,
-                caminos libres y desvíos.
+                Condicionales y bucles. Aprende a tomar decisiones automáticas para evadir obstáculos y optimiza tus secuencias repitiendo patrones de movimiento.
               </p>
 
               <div>
@@ -191,9 +188,9 @@ export default function LevelsPage() {
                 <div className="flex flex-wrap gap-2">
                   {[
                     "Usar if/else",
-                    "Aprovechar caminos libres",
-                    "Encadenar decisiones",
-                    "Rutas largas con avances",
+                    "Esquivar obstáculos",
+                    "Automatizar bucles",
+                    "Optimizar secuencias",
                   ].map(
                     (item) => (
                       <span
@@ -256,7 +253,7 @@ export default function LevelsPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-indigo-600/10 border border-indigo-400/20 flex items-center justify-center">
-                    <Repeat size={20} weight="duotone" className="text-indigo-600" />
+                    <Code size={20} weight="duotone" className="text-indigo-600" />
                   </div>
                   <div>
                     <span className="text-xs font-mono text-indigo-600 uppercase tracking-wider">
@@ -272,17 +269,17 @@ export default function LevelsPage() {
               </div>
 
               <p className="text-sm text-gray-600 leading-relaxed">
-                Bucles y condicionales anidados. Integra decisiones avanzadas y repeticiones inteligentes para guiar al robot a través de laberintos complejos y espirales.
+                Programación en C y Arduino. Aprenderás a programar en C para controlar el hardware de Arduino y a construir tus propios bloques personalizados para modularizar tus algoritmos.
               </p>
 
               <div>
                 <p className="text-xs text-gray-600 mb-3 font-medium">Lo que aprenderás</p>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    "Anidar bloques",
-                    "Estructuras repetitivas",
-                    "Lectura de distancias",
-                    "Navegacion compleja",
+                    "Programar en C",
+                    "Control de Arduino",
+                    "Crear bloques",
+                    "Modularidad C",
                   ].map(
                     (item) => (
                       <span

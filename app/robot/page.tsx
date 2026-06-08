@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import Link from "next/link";
 import AppNav from "@/components/AppNav";
 import {
-  WifiHigh, WifiSlash, BatteryFull, Cpu, StopCircle,
+  Bluetooth, BatteryFull, Cpu, StopCircle,
   ArrowLeft, CheckCircle, Warning, ArrowRight,
   Thermometer, ChartLineUp,
 } from "@phosphor-icons/react";
@@ -94,7 +94,7 @@ export default function RobotPage() {
               ? "bg-emerald-50 border-emerald-300 text-emerald-700"
               : "bg-red-50 border-red-300 text-red-600"
           }`}>
-            {connected ? <WifiHigh size={13} weight="fill" /> : <WifiSlash size={13} weight="fill" />}
+            <Bluetooth size={13} weight="fill" />
             {connected ? "Conectado" : "Desconectado"}
           </div>
         </motion.div>
@@ -217,10 +217,10 @@ export default function RobotPage() {
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <WifiHigh size={15} weight="duotone" className="text-emerald-600" />
-                    WiFi
+                    <Bluetooth size={15} weight="duotone" className="text-emerald-600" />
+                    Bluetooth
                   </div>
-                  <span className="text-xs font-mono text-emerald-600">Activo</span>
+                  <span className="text-xs font-mono text-emerald-600">Conectado</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -264,7 +264,7 @@ export default function RobotPage() {
                   <Warning size={15} weight="fill" />
                   Robot desconectado
                 </div>
-                <p className="text-xs text-red-500">Verifica que el ESP32 este encendido y en la misma red WiFi.</p>
+                <p className="text-xs text-red-500">Verifica que el ESP32 este encendido y el Bluetooth este activado.</p>
                 <button
                   onClick={() => setConnected(true)}
                   className="btn-press mt-3 w-full text-xs text-red-600 border border-red-300 rounded-lg py-2 hover:border-red-400 transition-colors"

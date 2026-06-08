@@ -23,8 +23,9 @@ import {
   Warning,
   X,
 } from "@phosphor-icons/react";
+import { LEVEL_2_STAGES } from "@/lib/nivel-1";
 import { LEVEL_3_STAGES } from "@/lib/nivel-2";
-import { unlockMissionAfterComplete } from "@/lib/progress";
+import { unlockMissionAfterComplete, saveRobotLoadPayload, type ProgressKey } from "@/lib/progress";
 import {
   type BlockType,
   type Dir,
@@ -174,7 +175,11 @@ export default function AdvancedLevelEditor({
   missionIndex,
 }: AdvancedLevelEditorProps) {
   const router = useRouter();
-  const showTutorial = missionIndex === 1;
+  const levelKey = config.levelKey || "3";
+  const progressKey = (config.progressKey as ProgressKey) || "bekie-level-3-progress";
+  const stagesList = levelKey === "2" ? LEVEL_2_STAGES : LEVEL_3_STAGES;
+  const totalMissions = stagesList.length;
+  const showTutorial = levelKey === "3" && missionIndex === 1;
   const gridSize = stage.grid.length;
   const [program, setProgram] = useState<Block[]>(() => [{ ...config.palette[0], id: "b_1" }]);
   const [compilerResult, setCompilerResult] = useState<CompilerResult>({
@@ -183,6 +188,9 @@ export default function AdvancedLevelEditor({
     issues: [],
     highlightIndexes: [],
   });
+  const [executionTrace, setExecutionTrace] = useState<string[]>([]);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [tutorialVisible, setTutorialVisible] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [scenarioIntroVisible, setScenarioIntroVisible] = useState(true);
@@ -198,7 +206,6 @@ export default function AdvancedLevelEditor({
   const paletteRef = useRef<HTMLDivElement | null>(null);
   const programRef = useRef<HTMLDivElement | null>(null);
   const compileRef = useRef<HTMLButtonElement | null>(null);
-  const loadRef = useRef<HTMLButtonElement | null>(null);
 
   const getPaletteBlock = useCallback(
     (type: BlockType) => config.palette.find((block) => block.type === type) ?? null,
@@ -1062,6 +1069,8 @@ export default function AdvancedLevelEditor({
     let skipAfterBranch = 0;
     let evaluationMessage = "El programa no llega a la meta.";
 
+    const trace: string[] = ["Iniciar mision"];
+
     while (stepCount++ <= MAX_STEPS) {
       if (stepIdx >= executionBlocks.length) {
         if (getCell(pos) === 3) {
@@ -1076,6 +1085,25 @@ export default function AdvancedLevelEditor({
       if (!block) {
         evaluationMessage = "La secuencia tiene un bloque incompleto.";
         break;
+      }
+
+      // Grabar en la traza solo los comandos que se ejecutan realmente
+      const blockLabel = BLOCK_LABELS[block.type] ?? block.label;
+      if (block.type === "FORWARD" || block.type === "BACKWARD") {
+        if ((block.steps ?? 1) > 1) {
+          trace.push(`${blockLabel} (N=${block.steps})`);
+        } else {
+          trace.push(blockLabel);
+        }
+      } else if (
+        block.type === "TURN_RIGHT" ||
+        block.type === "TURN_LEFT" ||
+        block.type === "WAIT" ||
+        block.type === "STOP"
+      ) {
+        trace.push(blockLabel);
+      } else if (block.type === "IF_OBS_ELSE") {
+        trace.push(sensors.obstacleAhead ? "Si hay obstaculo" : "Si no hay obstaculo");
       }
 
       switch (block.type as BlockType) {
@@ -1179,20 +1207,32 @@ export default function AdvancedLevelEditor({
       issues,
       highlightIndexes: issues.map((issue) => issue.index).filter((idx): idx is number => typeof idx === "number"),
     });
+    if (isSuccess) {
+      setExecutionTrace(trace);
+      setShowSuccessModal(true);
+    } else {
+      setShowErrorModal(true);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canCompile, config.start, config.startDir, normalizeStepCount, program, stage.grid]);
 
   const goToRobot = () => {
     if (compilerResult.status === "success") {
       unlockMissionAfterComplete(
-        "bekie-level-3-progress",
+        progressKey,
         missionIndex,
-        LEVEL_3_STAGES.length
+        totalMissions
       );
       if (showTutorial) {
         setTutorialVisible(false);
       }
-      router.push("/robot");
+      saveRobotLoadPayload({
+        levelKey: levelKey,
+        missionIndex,
+        missionTitle: stage.title,
+        commands: executionTrace,
+      });
+      router.push(`/levels/${levelKey}/load?mission=${missionIndex}`);
     }
   };
 
@@ -1280,7 +1320,7 @@ export default function AdvancedLevelEditor({
       {/* Editor Header */}
       <div className="sticky top-[52px] z-30 border-b border-gray-300/60 bg-white/95 backdrop-blur px-4 py-2.5 flex items-center justify-between gap-3">
         <Link
-          href={`/levels/3/mission`}
+          href={`/levels/${levelKey}/mission`}
           className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-700 transition-colors"
         >
           <ArrowLeft size={13} />
@@ -1290,6 +1330,16 @@ export default function AdvancedLevelEditor({
           {config.level} - {config.levelSlug} / {stage.title}
         </span>
         <div className="flex items-center gap-2">
+          {compilerResult.status === "error" && (
+            <button
+              type="button"
+              onClick={() => setShowErrorModal(true)}
+              className="btn-press flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-105 transition-colors"
+            >
+              <Warning size={13} weight="fill" className="text-red-500" />
+              Ver errores ({compilerResult.issues.length})
+            </button>
+          )}
           <button
             onClick={clearProgram}
             className="btn-press flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors"
@@ -1309,19 +1359,6 @@ export default function AdvancedLevelEditor({
             }`}
           >
             Compilar
-          </button>
-          <button
-            ref={loadRef}
-            onClick={goToRobot}
-            disabled={compilerResult.status !== "success"}
-            className={`btn-press flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
-              compilerResult.status === "success"
-                ? "bg-emerald-500 text-white hover:bg-emerald-400"
-                : "bg-gray-200 text-gray-400 cursor-not-allowed"
-            }`}
-          >
-            <Cpu size={13} weight="duotone" />
-            Cargar programa
           </button>
         </div>
       </div>
@@ -1394,7 +1431,7 @@ export default function AdvancedLevelEditor({
             )}
           </div>
           <div
-            className={`relative flex-1 overflow-y-auto p-4 max-w-[560px] mx-auto w-full transition-all ${
+            className={`relative flex-1 overflow-y-auto p-4 w-full transition-all ${
               isProgramDropActive ? "bg-indigo-50/70" : ""
             } ${
               isProgramDropGuideActive
@@ -1621,6 +1658,101 @@ export default function AdvancedLevelEditor({
             </div>
           </div>
         </motion.div>
+      )}
+      {/* Modal de Errores de Compilación */}
+      {showErrorModal && compilerResult.status === "error" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/50 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-lg bg-white rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col p-6 transition-all duration-300">
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-red-650 font-bold">
+                <Warning size={20} weight="fill" />
+                <h3 className="text-base font-bold">Errores de compilación</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowErrorModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="py-4 flex-1 overflow-y-auto max-h-[350px]">
+              <p className="text-[11px] text-gray-450 mb-3 uppercase tracking-wider font-mono">
+                Detalles de los problemas encontrados
+              </p>
+              <ul className="space-y-2.5">
+                {compilerResult.issues.map((issue, index) => (
+                  <li key={`${index}-${issue.message}`} className="flex gap-2.5 text-xs text-gray-700 bg-red-50/50 p-3.5 rounded-2xl border border-red-100">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                    <span className="font-mono leading-relaxed">{issue.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            <div className="pt-3.5 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowErrorModal(false)}
+                className="btn-press bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-lg transition-all duration-200"
+              >
+                Entendido, voy a corregir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Compilación Exitosa */}
+      {showSuccessModal && compilerResult.status === "success" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/50 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-lg bg-white rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col p-6 transition-all duration-300">
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-emerald-600 font-bold">
+                <CheckCircle size={20} weight="fill" />
+                <h3 className="text-base font-bold">¡Compilación Exitosa!</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSuccessModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="py-5 text-center flex flex-col items-center">
+              <div className="w-16 h-16 bg-emerald-50 border border-emerald-200 rounded-full flex items-center justify-center text-emerald-600 mb-4 animate-pulse">
+                <CheckCircle size={36} weight="duotone" />
+              </div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">El programa cumple con el escenario</h4>
+              <p className="text-xs text-gray-500 max-w-sm leading-relaxed">
+                Tu secuencia ha sido verificada y no presenta errores de lógica. Está lista para ser transmitida al robot físico por Bluetooth.
+              </p>
+            </div>
+            
+            <div className="pt-3.5 border-t border-gray-100 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowSuccessModal(false)}
+                className="btn-press border border-gray-200 hover:bg-gray-50 text-gray-600 font-semibold text-xs px-5 py-2.5 rounded-xl transition-all duration-200"
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  goToRobot();
+                }}
+                className="btn-press bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-lg transition-all duration-200"
+              >
+                Cargar al Robot
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

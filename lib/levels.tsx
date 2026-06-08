@@ -57,6 +57,8 @@ export interface EditorLevelContent {
   startDir: Dir;
   palette: PaletteBlock[];
   helperText: string;
+  levelKey?: string;
+  progressKey?: string;
 }
 
 export interface MissionStage {

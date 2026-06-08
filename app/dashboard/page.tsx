@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useState, useEffect } from "react";
 import Link from "next/link";
 import AppNav from "@/components/AppNav";
 import {
@@ -12,7 +12,6 @@ import {
   ArrowRight,
   Flame,
   Target,
-  Repeat,
 } from "@phosphor-icons/react";
 import { LEVEL_0_STAGES } from "@/lib/nivel-0";
 import { LEVEL_2_STAGES } from "@/lib/nivel-1";
@@ -45,7 +44,16 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 export default function DashboardPage() {
-  const userName = "Beymar";
+  const [userName, setUserName] = useState("Estudiante");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedName = localStorage.getItem("bekie-user-name");
+      if (storedName) {
+        setUserName(storedName);
+      }
+    }
+  }, []);
   const unlockedLevel0 = useSyncExternalStore(
     subscribeMissionProgress,
     () => readMissionProgress("bekie-level-0-progress", LEVEL_0_STAGES.length),
@@ -276,7 +284,7 @@ export default function DashboardPage() {
                 <h3 className="mt-0.5 text-lg font-bold text-gray-800">
                   Avanzado
                 </h3>
-                <p className="mt-1 text-xs text-gray-600">While + For</p>
+                <p className="mt-1 text-xs text-gray-600">Funciones y Bloques</p>
               </div>
               <span className="text-xs font-mono text-emerald-600 bg-emerald-400/10 px-2.5 py-1 rounded-full flex items-center gap-1">
                 <CheckCircle size={11} weight="fill" />
@@ -284,8 +292,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <p className="text-xs text-gray-600 flex-1">
-              Aprende a usar bucles avanzados: For para repetir acciones fijas y
-              While para evadir obstaculos automaticamente.
+              Aprende a crear tus propios bloques personalizados de código para agrupar instrucciones y resolver trayectorias complejas con un espacio limitado.
             </p>
             <div>
               <div className="flex justify-between text-xs text-gray-600 mb-2">

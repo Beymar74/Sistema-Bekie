@@ -4,6 +4,8 @@ import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EnvelopeSimple, Lock, ArrowRight, Eye, EyeSlash } from "@phosphor-icons/react";
+import Navbar from "@/components/Navbar";
+import Image from "next/image";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -15,6 +17,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -23,31 +26,63 @@ export default function LoginPage() {
       if (role === "teacher") {
         router.push("/teacher");
       } else {
-        const scenarioReady = typeof window !== "undefined"
-          ? localStorage.getItem("bekie-scenario-ready") === "true"
-          : false;
-        router.push(scenarioReady ? "/dashboard" : "/scenario-setup");
+        let isScenarioReady = false;
+        
+        if (typeof window !== "undefined") {
+          const lowerEmail = email.toLowerCase().trim();
+          
+          if (lowerEmail === "beymar@bekie.edu" && password === "password123") {
+            // Beymar: Primer Ingreso
+            localStorage.setItem("bekie-user-name", "Beymar");
+            localStorage.setItem("bekie-scenario-ready", "false");
+            localStorage.setItem("bekie-level-0-progress:v2:completed", "0");
+            localStorage.setItem("bekie-level-2-progress:v2:completed", "0");
+            localStorage.setItem("bekie-level-3-progress:v2:completed", "0");
+            isScenarioReady = false;
+          } else if (lowerEmail === "kiara@bekie.edu" && password === "password123") {
+            // Kiara: Nivel 1 (Intermedio)
+            localStorage.setItem("bekie-user-name", "Kiara");
+            localStorage.setItem("bekie-scenario-ready", "true");
+            localStorage.setItem("bekie-level-0-progress:v2:completed", "3");
+            localStorage.setItem("bekie-level-2-progress:v2:completed", "0");
+            localStorage.setItem("bekie-level-3-progress:v2:completed", "0");
+            isScenarioReady = true;
+          } else if (lowerEmail === "evelyn@bekie.edu" && password === "password123") {
+            // Evelyn: Nivel 2 (Avanzado)
+            localStorage.setItem("bekie-user-name", "Evelyn");
+            localStorage.setItem("bekie-scenario-ready", "true");
+            localStorage.setItem("bekie-level-0-progress:v2:completed", "3");
+            localStorage.setItem("bekie-level-2-progress:v2:completed", "7");
+            localStorage.setItem("bekie-level-3-progress:v2:completed", "0");
+            isScenarioReady = true;
+          } else {
+            // Fallback for other mock emails
+            const namePart = email.split("@")[0];
+            const formattedName = namePart ? namePart.charAt(0).toUpperCase() + namePart.slice(1) : "Estudiante";
+            localStorage.setItem("bekie-user-name", formattedName);
+            isScenarioReady = localStorage.getItem("bekie-scenario-ready") === "true";
+          }
+          
+          window.dispatchEvent(new Event("storage"));
+        }
+        
+        router.push(isScenarioReady ? "/dashboard" : "/scenario-setup");
       }
     }, 1000);
   };
 
   return (
-    <div className="min-h-[100dvh] bg-white flex items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.5, ease: EASE_OUT }}
-        >
-          {/* Logo */}
-          <div className="flex items-center gap-2.5 mb-10">
-            <Link href="/" className="flex items-center gap-2.5">
-              <span className="w-7 h-7 rounded-lg bg-cyan-600 flex items-center justify-center">
-                <span className="text-white font-black text-[11px] font-mono leading-none">BK</span>
-              </span>
-              <span className="font-semibold text-gray-700">BEKIE <span className="text-gray-500">/ WIRED</span></span>
-            </Link>
-          </div>
+    <div className="min-h-[100dvh] bg-white flex flex-col justify-between">
+      <Navbar />
+
+      <div className="flex-1 flex items-center justify-center p-6 pt-24 pb-12">
+        <div className="w-full max-w-sm">
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.5, ease: EASE_OUT }}
+          >
+
 
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">
             Iniciar sesion
@@ -154,5 +189,41 @@ export default function LoginPage() {
         </motion.div>
       </div>
     </div>
+
+    {/* Footer */}
+    <footer className="border-t border-gray-300/50 py-8">
+      <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5">
+          <Image
+            src="/logo/logo-bekiev1.png"
+            alt="BEKIE Logo"
+            width={32}
+            height={32}
+            className="rounded-md flex-shrink-0"
+          />
+          <span className="text-sm font-medium text-gray-600">
+            BEKIE / WIRED
+          </span>
+        </div>
+        <p className="text-xs text-gray-500">
+          Proyecto universitario - Robotica educativa
+        </p>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/login"
+            className="text-xs text-gray-600 hover:text-gray-700 transition-colors"
+          >
+            Iniciar sesion
+          </Link>
+          <Link
+            href="/register"
+            className="text-xs text-gray-600 hover:text-gray-700 transition-colors"
+          >
+            Registrarse
+          </Link>
+        </div>
+      </div>
+    </footer>
+  </div>
   );
 }

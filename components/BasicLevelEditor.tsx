@@ -789,7 +789,7 @@ export default function BasicLevelEditor({
           </div>
 
           <div
-            className={`relative flex-1 overflow-y-auto p-4 max-w-[560px] mx-auto w-full transition-all ${
+            className={`relative flex-1 overflow-y-auto p-4 w-full transition-all ${
               isProgramDropActive ? "bg-cyan-50/70" : ""
             } ${
               isProgramDropGuideActive

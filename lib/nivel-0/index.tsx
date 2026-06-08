@@ -2,13 +2,11 @@ import { Code, Flag, ArrowUp, ArrowDown, ArrowClockwise, ArrowCounterClockwise, 
 import { type EditorLevelContent, type MissionContent, type MissionStage, BASIC_PALETTE } from "@/lib/levels";
 
 const GRID_BASIC = [
-  [2, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 3],
+  [2, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 3],
 ];
 
 export const LEVEL_MISSIONS: Record<"1", MissionContent> = {

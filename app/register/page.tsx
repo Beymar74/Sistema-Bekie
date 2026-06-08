@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { User, EnvelopeSimple, Lock, ArrowRight, Eye, EyeSlash, GraduationCap, ChalkboardTeacher } from "@phosphor-icons/react";
 
@@ -38,6 +39,9 @@ export default function RegisterPage() {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("bekie-user-name", name);
+      }
       router.push(role === "teacher" ? "/teacher" : "/dashboard");
     }, 1200);
   };
@@ -52,9 +56,13 @@ export default function RegisterPage() {
         >
           <div className="flex items-center gap-2.5 mb-10">
             <Link href="/" className="flex items-center gap-2.5">
-              <span className="w-7 h-7 rounded-lg bg-cyan-600 flex items-center justify-center">
-                <span className="text-white font-black text-[11px] font-mono leading-none">BK</span>
-              </span>
+              <Image
+                src="/logo/logo-bekiev1.png"
+                alt="BEKIE Logo"
+                width={28}
+                height={28}
+                className="rounded-md flex-shrink-0"
+              />
               <span className="font-semibold text-gray-700">BEKIE <span className="text-gray-500">/ WIRED</span></span>
             </Link>
           </div>

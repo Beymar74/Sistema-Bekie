@@ -100,7 +100,7 @@ export default function RobotLoadPage() {
     <div className="min-h-[100dvh] bg-gray-50 flex flex-col">
       <AppNav userName="Beymar" role="student" />
 
-      <main className="flex-1 max-w-lg mx-auto w-full px-5 py-8">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-5 py-8">
         <Link
           href={`/levels/${levelKey}/editor?mission=${payload.missionIndex}`}
           className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 mb-6"

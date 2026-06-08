@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
 import { useScenarioWizard } from "../_hooks/useScenarioWizard";
 import MaterialsScreen from "./MaterialsScreen";
@@ -36,9 +37,13 @@ export default function ScenarioWizard() {
       {/* Cabecera superior del Wizard */}
       <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur px-5 py-3.5 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-md bg-cyan-600 flex items-center justify-center">
-            <span className="text-white font-black text-[9px] font-mono leading-none">BK</span>
-          </span>
+          <Image
+            src="/logo/logo-bekiev1.png"
+            alt="BEKIE Logo"
+            width={24}
+            height={24}
+            className="rounded-md flex-shrink-0"
+          />
           <span className="font-semibold text-slate-800 text-sm">
             BEKIE <span className="text-slate-500 font-normal">/ WIRED</span>
           </span>

@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useState, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
@@ -320,7 +321,7 @@ function Tile({
 
   // Determinar el color de la celda según su estado
   let color = "#e5e7eb"; // Gris claro por defecto
-  let opacity = 0.9;
+  const opacity = 0.9;
 
   if (showStart && isStart) {
     color = "#a5f3fc"; // Cyan claro

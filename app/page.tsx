@@ -14,7 +14,6 @@ import {
   GraduationCap,
   Sparkle,
   CaretRight,
-  Repeat,
 } from "@phosphor-icons/react";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -511,16 +510,14 @@ export default function HomePage() {
                   </span>
                 </div>
                 <p className="mt-3 text-gray-600 text-sm leading-relaxed">
-                  Bucles avanzados. Usa While para evadir obstaculos
-                  automaticamente y For para repetir acciones un numero exacto
-                  de veces.
+                  Programación en C y Arduino. Aprenderás a programar en C para controlar Arduino y a construir tus propios bloques personalizados de código.
                 </p>
               </div>
               <ul className="flex flex-col gap-2">
                 {[
-                  "For N veces: repeticion exacta",
-                  "While hay obstaculo: evasion automatica",
-                  "Combinar if/else + While + For",
+                  "Programar en lenguaje C para Arduino",
+                  "Crear y nombrar bloques personalizados (funciones C)",
+                  "Modularidad y control de hardware físico",
                 ].map((feat) => (
                   <li
                     key={feat}
