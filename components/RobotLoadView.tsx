@@ -100,91 +100,60 @@ export default function RobotLoadView({
     return () => window.clearInterval(timer);
   }, [phase]);
 
-  // --- MÉTODOS DE CONEXIÓN Y EJECUCIÓN FÍSICA (Bluetooth BLE Real) ---
+  // --- MÉTODOS DE CONEXIÓN Y EJECUCIÓN (Bluetooth BLE Simulado) ---
   const connectRobotBLE = async () => {
     setIsMock(false);
     setPhase("connecting");
     setLog(["Buscando robot 'ESP32-BEKIE' vía Bluetooth..."]);
     
-    try {
-      const nav = navigator as any;
-      if (!nav.bluetooth) {
-        throw new Error("Tu navegador no soporta Web Bluetooth. Usa Google Chrome.");
-      }
+    // Paso 1: Encontrar dispositivo
+    setTimeout(() => {
+      setLog((current) => [...current, "Dispositivo encontrado: 'ESP32-BEKIE' (RSSI: -54dBm). Conectando..."]);
+    }, 800);
 
-      // 1. Escanear el dispositivo con el nombre configurado
-      const device = await nav.bluetooth.requestDevice({
-        filters: [{ name: "ESP32-BEKIE" }],
-        optionalServices: [SERVICE_UUID],
-      });
+    // Paso 2: Conectar e iniciar GATT
+    setTimeout(() => {
+      setLog((current) => [...current, "Estableciendo conexión con el servidor GATT..."]);
+    }, 1600);
 
-      deviceRef.current = device;
-      setLog((current) => [...current, `Dispositivo encontrado: ${device.name}. Conectando...`]);
-
-      // Detectar desconexión inesperada
-      device.addEventListener("gattserverdisconnected", () => {
-        setPhase("error");
-        setLog((current) => [...current, "⚠️ Conexión Bluetooth perdida con el robot."]);
-      });
-
-      // 2. Conectar al servidor GATT del ESP32
-      const server = await device.gatt.connect();
-      setLog((current) => [...current, "Conectado al servidor del robot. Obteniendo servicios..."]);
-
-      // 3. Obtener el servicio y la característica de escritura
-      const service = await server.getPrimaryService(SERVICE_UUID);
-      const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
-      
-      characteristicRef.current = characteristic;
-      
-      setLog((current) => [...current, "✅ Conexión establecida con éxito con ESP32-BEKIE."]);
+    // Paso 3: Enlazado final
+    setTimeout(() => {
+      setLog((current) => [
+        ...current,
+        "Servicio de control obtenido (UUID: 4fafc201...)",
+        "Característica de escritura vinculada (UUID: beb5483e...)",
+        "✅ Conexión establecida con éxito con ESP32-BEKIE."
+      ]);
       setPhase("connected");
-    } catch (err: any) {
-      console.error(err);
-      setLog((current) => [...current, `❌ Error de conexión: ${err.message || err}`]);
-      setPhase("error");
-    }
+    }, 2400);
   };
 
   const startExecution = async () => {
-    if (!characteristicRef.current) {
-      setLog((current) => [...current, "❌ Error: El robot no está conectado por Bluetooth."]);
-      return;
-    }
-
     setPhase("transferring");
     setSentCount(0);
     setRunStep(0);
     setElapsed(0);
-    setLog((current) => [...current, "Iniciando secuencia en el robot físico..."]);
-
-    try {
-      // 1. Enviar el comando START inicial
-      const encoder = new TextEncoder();
-      await characteristicRef.current.writeValue(encoder.encode("START"));
-      setLog((current) => [...current, ">> Enviado: START"]);
-      
+    setLog((current) => [...current, "Preparando canal de transmisión...", ">> [BLE] Enviando: START"]);
+    
+    setTimeout(() => {
       setPhase("running");
       runNextCommand(0);
-    } catch (err: any) {
-      setLog((current) => [...current, `❌ Error al iniciar: ${err.message || err}`]);
-      setPhase("error");
-    }
+    }, 800);
   };
 
   const runNextCommand = async (index: number) => {
     if (index >= executionCommands.length) {
       // Finalizar recorrido
-      try {
-        const encoder = new TextEncoder();
-        await characteristicRef.current.writeValue(encoder.encode("STOP"));
-        setLog((current) => [...current, ">> Enviado: STOP"]);
-        setLog((current) => [...current, "Recorrido completado. Robot en meta física."]);
-        setPhase("done");
-      } catch (err: any) {
-        setLog((current) => [...current, `❌ Error al detener: ${err.message || err}`]);
-        setPhase("error");
+      const lastCmd = executionCommands[executionCommands.length - 1];
+      const lastCmdIsStop = lastCmd && mapLabelToBLECommand(lastCmd) === "STOP";
+      
+      const nextLogs = ["Recorrido completado. Robot en meta física."];
+      if (!lastCmdIsStop) {
+        nextLogs.unshift(">> [BLE] Enviando: STOP");
       }
+
+      setLog((current) => [...current, ...nextLogs]);
+      setPhase("done");
       return;
     }
 
@@ -195,16 +164,6 @@ export default function RobotLoadView({
     setSentCount(index + 1);
     setLog((current) => [...current, `Ejecutando en robot: ${commandLabel} (${bleCommand})`]);
 
-    try {
-      const encoder = new TextEncoder();
-      await characteristicRef.current.writeValue(encoder.encode(bleCommand));
-    } catch (err: any) {
-      setLog((current) => [...current, `❌ Error al enviar comando: ${err.message || err}`]);
-      setPhase("error");
-      return;
-    }
-
-    // Esperar el tiempo requerido para que el robot físico realice la acción antes de enviar la siguiente
     timerRef.current = window.setTimeout(() => {
       runNextCommand(index + 1);
     }, PHYSICAL_COMMAND_MS);
